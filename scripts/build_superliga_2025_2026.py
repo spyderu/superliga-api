@@ -13,8 +13,14 @@ def get_json(url: str) -> dict:
     r.raise_for_status()
     return r.json()
 
-def iso_now():
+def iso_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+def to_int_safe(x):
+    try:
+        return int(x) if x is not None and str(x).strip() != "" else None
+    except Exception:
+        return None
 
 def norm_event(e: dict) -> dict:
     date = (e.get("dateEvent") or "").strip()
@@ -24,16 +30,10 @@ def norm_event(e: dict) -> dict:
     if date:
         kickoff = date + ("T" + time if time else "")
 
-    def to_int(x):
-        try:
-            return int(x) if x is not None and str(x).strip() != "" else None
-        except:
-            return None
-
     home = (e.get("strHomeTeam") or "").strip()
     away = (e.get("strAwayTeam") or "").strip()
-    hs = to_int(e.get("intHomeScore"))
-    as_ = to_int(e.get("intAwayScore"))
+    hs = to_int_safe(e.get("intHomeScore"))
+    as_ = to_int_safe(e.get("intAwayScore"))
 
     status = "scheduled"
     if hs is not None and as_ is not None:
@@ -60,48 +60,61 @@ def norm_event(e: dict) -> dict:
         "source_league_id": LEAGUE_ID,
     }
 
+def dedupe_by_id(events: list[dict]) -> list[dict]:
+    seen = set()
+    uniq = []
+    for ev in events:
+        k = ev.get("idEvent") or (ev.get("kickoff_raw"), ev.get("home"), ev.get("away"))
+        if k in seen:
+            continue
+        seen.add(k)
+        uniq.append(ev)
+    return uniq
+
 def main():
     os.makedirs(OUTDIR, exist_ok=True)
 
-    # Fixtures viitoare
+    # 1) NEXT EVENTS (fixtures / uneori include și finished, depinde de feed)
     next_url = f"{BASE}/eventsnextleague.php?id={LEAGUE_ID}"
     next_data = get_json(next_url)
-    next_events = next_data.get("events") or []
-    fixtures = [norm_event(e) for e in next_events]
+    next_events_raw = next_data.get("events") or []
+    next_all = [norm_event(e) for e in next_events_raw]
+
+    fixtures = [m for m in next_all if m["status"] == "scheduled"]
     fixtures.sort(key=lambda x: (x.get("dateEvent") or "", x.get("strTime") or ""))
 
-    # Rezultate trecute
+    # 2) PAST EVENTS (results)
     past_url = f"{BASE}/eventspastleague.php?id={LEAGUE_ID}"
     past_data = get_json(past_url)
-    past_events = past_data.get("events") or []
-    results = [norm_event(e) for e in past_events]
-    results = [r for r in results if r["status"] == "finished"]
+    past_events_raw = past_data.get("events") or []
+    past_all = [norm_event(e) for e in past_events_raw]
+    results = [r for r in past_all if r["status"] == "finished"]
+
+    # 3) Dacă "next" a întors meciuri deja terminate, le adăugăm la results
+    results.extend([m for m in next_all if m["status"] == "finished"])
+
+    # dedupe + sort desc (cele mai noi primele)
+    results = dedupe_by_id(results)
     results.sort(key=lambda x: (x.get("dateEvent") or "", x.get("strTime") or ""), reverse=True)
 
-    # Clasament
+    # 4) STANDINGS
     table_url = f"{BASE}/lookuptable.php?l={LEAGUE_ID}&s={SEASON}"
     table_data = get_json(table_url)
     table = table_data.get("table") or []
 
     standings = []
     for row in table:
-        def to_int(v):
-            try:
-                return int(v) if v is not None and str(v).strip() != "" else None
-            except:
-                return None
-
         standings.append({
-            "position": to_int(row.get("intRank")),
+            "position": to_int_safe(row.get("intRank")),
             "team": (row.get("strTeam") or "").strip(),
-            "played": to_int(row.get("intPlayed")),
-            "win": to_int(row.get("intWin")),
-            "draw": to_int(row.get("intDraw")),
-            "loss": to_int(row.get("intLoss")),
-            "gf": to_int(row.get("intGoalsFor")),
-            "ga": to_int(row.get("intGoalsAgainst")),
-            "gd": to_int(row.get("intGoalDifference")),
-            "points": to_int(row.get("intPoints")),
+            "played": to_int_safe(row.get("intPlayed")),
+            "win": to_int_safe(row.get("intWin")),
+            "draw": to_int_safe(row.get("intDraw")),
+            "loss": to_int_safe(row.get("intLoss")),
+            "gf": to_int_safe(row.get("intGoalsFor")),
+            "ga": to_int_safe(row.get("intGoalsAgainst")),
+            "gd": to_int_safe(row.get("intGoalDifference")),
+            "points": to_int_safe(row.get("intPoints")),
         })
 
     standings = [s for s in standings if s["team"]]
