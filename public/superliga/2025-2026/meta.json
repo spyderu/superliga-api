@@ -1,42 +1,31 @@
 {
-  "script_version": SCRIPT_VERSION,
   "competition": "SuperLiga",
   "season": "2025-2026",
-  "sources": {
-    "matches": "lpf2.ro/html/etape",
-    "standings": "lpf2.ro"
-  },
-  "generated_utc": "2026-02-09T21:28:06Z",
-  "current_round": 26,
+  "script_version": "2026-02-09_force_v2",
+  "generated_utc": "2026-02-09T22:13:52Z",
+  "current_round": 1,
   "rounds_fetched": {
-    "from": 24,
-    "to": 30
+    "from": 1,
+    "to": 5
   },
   "status": {
-    "current_round": "home_ok",
-    "matches": "lpf2_ok_rounds:24-30",
-    "standings": "lpf2_ok",
+    "current_round": "latest_not_found",
+    "matches": "kept_old_parsed:0",
     "rounds": [
       {
-        "24": "round_ok"
+        "1": "ok:0"
       },
       {
-        "25": "round_ok"
+        "2": "ok:0"
       },
       {
-        "26": "round_ok"
+        "3": "ok:0"
       },
       {
-        "27": "round_ok"
+        "4": "ok:0"
       },
       {
-        "28": "round_ok"
-      },
-      {
-        "29": "round_ok"
-      },
-      {
-        "30": "round_ok"
+        "5": "ok:0"
       }
     ]
   },
