@@ -10,18 +10,21 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from bs4 import BeautifulSoup
 
-SCRIPT_VERSION = "2026-02-09_force_v3"
+SCRIPT_VERSION = "2026-02-09_force_v4_jina"
 
 SEASON = "2025-2026"
 OUTDIR = os.path.join("public", "superliga", SEASON)
 
 LPF2_ETAPA_URL = "https://lpf2.ro/html/etape/Etapa-{n}.html"
 
+# fallback text proxy (important)
+JINA_PREFIX = "https://r.jina.ai/https://"
+
 PAST_ROUNDS = 2
 FUTURE_ROUNDS = 4
 MAX_ROUNDS = 30
 
-UA = "Mozilla/5.0 (compatible; superliga-api-bot/4.3; +https://github.com/spyderu/superliga-api)"
+UA = "Mozilla/5.0 (compatible; superliga-api-bot/4.4; +https://github.com/spyderu/superliga-api)"
 
 RO_MONTH_FULL = {
     "ianuarie": 1, "februarie": 2, "martie": 3, "aprilie": 4, "mai": 5, "iunie": 6,
@@ -48,10 +51,33 @@ def make_session() -> requests.Session:
 
 SESSION = make_session()
 
-def fetch_html(url: str) -> str:
+def fetch_raw(url: str) -> str:
     r = SESSION.get(url, timeout=(15, 30))
     r.raise_for_status()
     return r.text
+
+def looks_blocked_or_empty(text: str) -> bool:
+    t = text.lower()
+    # Dacă LPF2 dă "empty shell" / blocaj, de obicei lipsesc complet cuvintele astea.
+    # Noi avem nevoie de luni românești + "pozitia" sau "etapa".
+    needles = ["februarie", "ianuarie", "martie", "pozitia", "etapa"]
+    found = sum(1 for n in needles if n in t)
+    # prea scurt sau aproape nimic relevant -> fallback
+    return len(text) < 5000 or found == 0
+
+def fetch_html_with_fallback(url: str) -> Tuple[str, str]:
+    """
+    1) direct
+    2) fallback prin r.jina.ai
+    """
+    txt = fetch_raw(url)
+    if not looks_blocked_or_empty(txt):
+        return txt, "direct"
+
+    # fallback
+    jina_url = JINA_PREFIX + url.replace("https://", "")
+    txt2 = fetch_raw(jina_url)
+    return txt2, "jina"
 
 # -------------------------
 # IO helpers
@@ -106,17 +132,12 @@ def norm_space(s: str) -> str:
     return s
 
 def clean_line_for_match(line: str) -> str:
-    # LPF2 pune "Image" foarte des + "Image: Caseta..."
     line = norm_space(line)
+    # LPF2 introduce des "Image" în text
     line = re.sub(r"\bImage\b", " ", line)
     line = norm_space(line)
-    # taie la primele markere "Image:" (Caseta/Rezumat etc.)
     if "Image:" in line:
         line = line.split("Image:", 1)[0]
-    # taie orice resturi de meniu
-    for cut in ["Tweet", "Follow @", "Meniu Principal", "Clasamentul etapei", "Pozitia Echipa"]:
-        if cut in line:
-            line = line.split(cut, 1)[0]
     return norm_space(line)
 
 def parse_ro_datetime(date_str: str, time_str: str) -> Tuple[str, str]:
@@ -131,6 +152,13 @@ def parse_ro_datetime(date_str: str, time_str: str) -> Tuple[str, str]:
     hh, mm = time_str.strip().split(":")
     dt = datetime(yyyy, RO_MONTH_FULL[mon], dd, int(hh), int(mm))
     return dt.strftime("%Y-%m-%d"), dt.strftime("%H:%M:%S")
+
+def cleanup_team(s: str) -> str:
+    s = norm_space(s)
+    for cut in ["Caseta", "Rezumatul", "comentariile", "Tweet", "Follow", "Meniu", "Clasamentul", "Pozitia"]:
+        if cut in s:
+            s = s.split(cut, 1)[0]
+    return norm_space(s)
 
 def match_obj(round_no: int, dateEvent: str, timeEvent: str,
               home: str, away: str, hs: Optional[int], as_: Optional[int]) -> Dict:
@@ -147,28 +175,26 @@ def match_obj(round_no: int, dateEvent: str, timeEvent: str,
         "away": away,
         "status": status,
         "score": {"home": hs, "away": as_},
-
-        # alias pt aplicație
         "homeTeam": home,
         "awayTeam": away,
         "played": played,
         "intHomeScore": hs,
         "intAwayScore": as_,
-
         "source": "LPF2",
         "source_league_id": "lpf2.ro",
     }
 
-def extract_lines_from_etapa(round_no: int) -> List[str]:
-    html = fetch_html(LPF2_ETAPA_URL.format(n=round_no))
+def extract_lines_from_etapa(round_no: int) -> Tuple[List[str], str]:
+    url = LPF2_ETAPA_URL.format(n=round_no)
+    html, method = fetch_html_with_fallback(url)
+
+    # dacă vine prin jina, e deja text-ish; tot folosim BeautifulSoup ca să uniformizăm
     soup = BeautifulSoup(html, "lxml")
-    # IMPORTANT: păstrăm liniile așa cum vin din pagină (ele sunt pe un singur rând)
     lines = [ln for ln in soup.get_text("\n").splitlines() if ln.strip()]
-    return [norm_space(ln) for ln in lines]
+    lines = [norm_space(ln) for ln in lines]
+    return lines, method
 
-# MATCH regex (căutare în linie, nu match la început)
 DATE_TIME = r"(\d{1,2}\s+[A-Za-zăâîșțĂÂÎȘȚ]+\s+\d{4}),\s*(\d{1,2}:\d{2})"
-
 RGX_FINISHED_SEARCH = re.compile(
     DATE_TIME + r".*?([A-Za-z0-9ăâîșțĂÂÎȘȚ .'-]+?)\s+(\d{1,2})-(\d{1,2})\s+([A-Za-z0-9ăâîșțĂÂÎȘȚ .'-]+)",
     re.UNICODE
@@ -178,16 +204,8 @@ RGX_SCHEDULED_SEARCH = re.compile(
     re.UNICODE
 )
 
-def cleanup_team(s: str) -> str:
-    s = norm_space(s)
-    # taie dacă apar resturi
-    for cut in ["Caseta", "Rezumatul", "comentariile", "Image", "Tweet", "Follow", "Meniu"]:
-        if cut in s:
-            s = s.split(cut, 1)[0]
-    return norm_space(s)
-
-def extract_matches_from_round(round_no: int) -> List[Dict]:
-    lines = extract_lines_from_etapa(round_no)
+def extract_matches_from_round(round_no: int) -> Tuple[List[Dict], str, List[str]]:
+    lines, method = extract_lines_from_etapa(round_no)
     out: List[Dict] = []
 
     for raw in lines:
@@ -222,10 +240,19 @@ def extract_matches_from_round(round_no: int) -> List[Dict]:
             continue
         seen.add(key)
         uniq.append(mm)
-    return uniq
 
-def extract_standings_from_round(round_no: int) -> List[Dict]:
-    lines = extract_lines_from_etapa(round_no)
+    # debug: primele linii utile, ca să vedem ce primește runner-ul
+    dbg = []
+    for ln in lines[:60]:
+        if any(x in ln.lower() for x in ["februarie", "ianuarie", "pozitia", "etapa", "2026"]):
+            dbg.append(ln)
+        if len(dbg) >= 20:
+            break
+
+    return uniq, method, dbg
+
+def extract_standings_from_round(round_no: int) -> Tuple[List[Dict], str]:
+    lines, method = extract_lines_from_etapa(round_no)
 
     start = None
     for i, ln in enumerate(lines):
@@ -233,9 +260,8 @@ def extract_standings_from_round(round_no: int) -> List[Dict]:
             start = i + 1
             break
     if start is None:
-        return []
+        return [], method
 
-    # Format real LPF2: "1CS Universitatea Craiova26 14 8 4 46-25 (21)50 (25)(+11)" :contentReference[oaicite:2]{index=2}
     rgx = re.compile(
         r"^(\d{1,2})\s*([A-Za-z0-9ăâîșțĂÂÎȘȚ .'-]+?)\s*(\d{1,2})\s+(\d{1,2})\s+(\d{1,2})\s+(\d{1,2})\s+"
         r"(\d{1,3})-(\d{1,3})\s*\(\s*([-+]?\d+)\s*\)\s*(\d{1,3})\s*\(\s*(\d{1,3})\s*\)\s*\(\s*([-+]?\d+)\s*\)\s*$",
@@ -245,8 +271,6 @@ def extract_standings_from_round(round_no: int) -> List[Dict]:
     standings: List[Dict] = []
     for ln in lines[start:]:
         ln = norm_space(ln)
-        if not ln or ln.lower().startswith("## meniu"):
-            break
         if ln.lower().startswith("playout"):
             continue
 
@@ -283,24 +307,24 @@ def extract_standings_from_round(round_no: int) -> List[Dict]:
             break
 
     standings.sort(key=lambda x: x["position"])
-    return standings
+    return standings, method
 
 def find_latest_round_with_16_standings() -> Tuple[int, str]:
     for r in range(MAX_ROUNDS, 0, -1):
         try:
-            st = extract_standings_from_round(r)
+            st, _ = extract_standings_from_round(r)
             if len(st) == 16:
                 return r, "latest_ok"
         except Exception:
             continue
-    return 1, "latest_not_found"
+    return 26, "forced_26"  # fallback pragmatic
 
 def main():
     os.makedirs(OUTDIR, exist_ok=True)
 
     current_round, cr_status = find_latest_round_with_16_standings()
 
-    standings = extract_standings_from_round(current_round)
+    standings, standings_method = extract_standings_from_round(current_round)
     if len(standings) != 16:
         prev = read_existing(os.path.join(OUTDIR, "standings.json"))
         if isinstance(prev, list) and len(prev) == 16:
@@ -311,12 +335,15 @@ def main():
 
     all_matches: List[Dict] = []
     round_notes = []
+    debug_snippet = {}
+
     for r in range(start_r, end_r + 1):
-        ms = extract_matches_from_round(r)
-        round_notes.append({str(r): f"ok:{len(ms)}"})
+        ms, method, dbg = extract_matches_from_round(r)
+        round_notes.append({str(r): f"{method}:{len(ms)}"})
+        if r == current_round and dbg:
+            debug_snippet[str(r)] = dbg
         all_matches.extend(ms)
 
-    # dacă nu scoate nimic, NU suprascriem cu gol
     if len(all_matches) >= 8:
         fixtures = [m for m in all_matches if m["status"] == "scheduled"]
         results = [m for m in all_matches if m["status"] == "finished"]
@@ -337,6 +364,7 @@ def main():
         "rounds_fetched": {"from": start_r, "to": end_r},
         "status": {
             "current_round": cr_status,
+            "standings_fetch": standings_method,
             "matches": matches_status,
             "rounds": round_notes,
         },
@@ -345,6 +373,7 @@ def main():
             "results": len(results),
             "standings_rows": len(standings),
         },
+        "debug": debug_snippet
     }
 
     write_json_if_changed(os.path.join(OUTDIR, "standings.json"), standings)
