@@ -13,18 +13,16 @@ from bs4 import BeautifulSoup
 SEASON = "2025-2026"
 OUTDIR = os.path.join("public", "superliga", SEASON)
 
-# Meciuri: lpf.ro (etape)
 LPF_LIGA1_URL = "https://lpf.ro/liga-1"
 LPF_ETAPA_URL = "https://lpf.ro/etape-liga-1/{round}"
 
-# Clasament: lpf2.ro
 LPF2_STANDINGS_URL = "https://lpf2.ro/"
 
 PAST_ROUNDS = 2
 FUTURE_ROUNDS = 3
 MAX_ROUNDS = 30
 
-UA = "Mozilla/5.0 (compatible; superliga-api-bot/1.2; +https://github.com/spyderu/superliga-api)"
+UA = "Mozilla/5.0 (compatible; superliga-api-bot/1.3; +https://github.com/spyderu/superliga-api)"
 
 RO_MONTH = {
     "ian": 1, "feb": 2, "mar": 3, "apr": 4, "mai": 5, "iun": 6,
@@ -54,7 +52,6 @@ def make_session() -> requests.Session:
 SESSION = make_session()
 
 def fetch_html(url: str) -> str:
-    # timeout = (connect_timeout, read_timeout)
     r = SESSION.get(url, timeout=(15, 30))
     r.raise_for_status()
     return r.text
@@ -119,6 +116,37 @@ def is_team_line(ln: str) -> bool:
         return False
     return any(ch.isalpha() for ch in l)
 
+def match_obj(round_no: int, dateEvent: str, timeEvent: str, home: str, away: str, hs: Optional[int], as_: Optional[int]) -> Dict:
+    status = "scheduled" if (hs is None or as_ is None) else "finished"
+    played = status == "finished"
+    return {
+        "idEvent": None,
+        "season": SEASON,
+        "round": str(round_no),
+        "dateEvent": dateEvent,
+        "strTime": timeEvent,
+        "kickoff_raw": f"{dateEvent}T{timeEvent}",
+
+        # cheile folosite de noi
+        "home": home,
+        "away": away,
+        "status": status,
+        "score": {"home": hs, "away": as_},
+
+        # ALIAS pentru aplicații care așteaptă alt schema
+        "homeTeam": home,
+        "awayTeam": away,
+        "played": played,
+        "intHomeScore": hs,
+        "intAwayScore": as_,
+
+        "venue": None,
+        "city": None,
+        "event": {"strEvent": f"{home} vs {away}", "strLeague": "SuperLiga"},
+        "source": "LPF",
+        "source_league_id": "lpf.ro",
+    }
+
 def extract_matches_from_round(round_no: int) -> List[Dict]:
     html = fetch_html(LPF_ETAPA_URL.format(round=round_no))
     lines = soup_text_lines(html)
@@ -134,7 +162,6 @@ def extract_matches_from_round(round_no: int) -> List[Dict]:
                 continue
             dateEvent, timeEvent = dt
 
-            # home
             j = i + 1
             while j < len(lines) and (is_noise_line(lines[j]) or is_score_token(lines[j])):
                 j += 1
@@ -143,13 +170,9 @@ def extract_matches_from_round(round_no: int) -> List[Dict]:
                 continue
             home = lines[j].strip()
 
-            # home score
             k = j + 1
             while k < len(lines) and not is_score_token(lines[k]):
-                if is_noise_line(lines[k]):
-                    k += 1
-                    continue
-                if re.fullmatch(r"\d{1,2}:\d{2}", lines[k].strip()):
+                if is_noise_line(lines[k]) or re.fullmatch(r"\d{1,2}:\d{2}", lines[k].strip()):
                     k += 1
                     continue
                 k += 1
@@ -158,7 +181,6 @@ def extract_matches_from_round(round_no: int) -> List[Dict]:
                 continue
             hs_tok = lines[k].strip()
 
-            # away
             a = k + 1
             while a < len(lines) and (is_noise_line(lines[a]) or is_score_token(lines[a]) or is_datetime_line(lines[a])):
                 a += 1
@@ -167,13 +189,9 @@ def extract_matches_from_round(round_no: int) -> List[Dict]:
                 continue
             away = lines[a].strip()
 
-            # away score
             b = a + 1
             while b < len(lines) and not is_score_token(lines[b]):
-                if is_noise_line(lines[b]):
-                    b += 1
-                    continue
-                if re.fullmatch(r"\d{1,2}:\d{2}", lines[b].strip()):
+                if is_noise_line(lines[b]) or re.fullmatch(r"\d{1,2}:\d{2}", lines[b].strip()):
                     b += 1
                     continue
                 b += 1
@@ -183,33 +201,14 @@ def extract_matches_from_round(round_no: int) -> List[Dict]:
             as_tok = lines[b].strip()
 
             hs = None if hs_tok == "-" else int(hs_tok)
-            a_s = None if as_tok == "-" else int(as_tok)
-            status = "scheduled" if (hs is None or a_s is None) else "finished"
+            as_ = None if as_tok == "-" else int(as_tok)
 
-            matches.append({
-                "idEvent": None,
-                "season": SEASON,
-                "round": str(round_no),
-                "dateEvent": dateEvent,
-                "strTime": timeEvent,
-                "kickoff_raw": f"{dateEvent}T{timeEvent}",
-                "home": home,
-                "away": away,
-                "status": status,
-                "score": {"home": hs, "away": a_s},
-                "venue": None,
-                "city": None,
-                "event": {"strEvent": f"{home} vs {away}", "strLeague": "SuperLiga"},
-                "source": "LPF",
-                "source_league_id": "lpf.ro",
-            })
-
+            matches.append(match_obj(round_no, dateEvent, timeEvent, home, away, hs, as_))
             i = b + 1
             continue
 
         i += 1
 
-    # dedupe
     seen = set()
     uniq = []
     for m in matches:
@@ -221,6 +220,11 @@ def extract_matches_from_round(round_no: int) -> List[Dict]:
     return uniq
 
 def parse_standings_from_lpf2() -> Tuple[List[Dict], str]:
+    """
+    Fix major: extrage PUNCTELE reale, nu "Adevăr".
+    Căutăm explicit:
+    ... gf-ga (...) POINTS (...) (ADEVĂR)
+    """
     try:
         html = fetch_html(LPF2_STANDINGS_URL)
     except Exception as e:
@@ -228,52 +232,52 @@ def parse_standings_from_lpf2() -> Tuple[List[Dict], str]:
 
     soup = BeautifulSoup(html, "lxml")
 
-    # caută un tabel care conține "Pozitia" și "Puncte"
-    best_rows = []
+    # găsește tabelul de clasament
+    rows = None
     for t in soup.find_all("table"):
         txt = t.get_text(" ", strip=True).lower()
         if "pozitia" in txt and "puncte" in txt and ("meciuri" in txt or "victorii" in txt):
-            best_rows = t.find_all("tr")
+            rows = t.find_all("tr")
             break
+
+    # fallback: parse din text brut
+    if rows is None:
+        lines = soup_text_lines(html)
+        candidates = [ln for ln in lines if re.match(r"^\d{1,2}\s*\w", ln)]
+    else:
+        candidates = [tr.get_text(" ", strip=True) for tr in rows]
 
     standings = []
 
-    def parse_row_text(txt: str) -> Optional[Dict]:
+    # regex robust: pos team played win draw loss gf-ga (gd?) points (x) (adevar)
+    rgx = re.compile(
+        r"^\s*(\d{1,2})\s+(.+?)\s+(\d{1,2})\s+(\d{1,2})\s+(\d{1,2})\s+(\d{1,2})\s+(\d{1,3})\s*-\s*(\d{1,3})"
+        r"(?:\s*\(\s*([+-]?\d+)\s*\))?"
+        r"\s+(\d{1,3})"                      # POINTS (asta vrem!)
+        r"(?:\s*\(\s*(\d{1,3})\s*\))?"
+        r"(?:\s*\(\s*([+-]?\d+)\s*\))?\s*$",
+        re.UNICODE
+    )
+
+    for txt in candidates:
         txt = re.sub(r"\s+", " ", txt).strip()
-        mpos = re.match(r"^(\d{1,2})\s*(.*)$", txt)
-        if not mpos:
-            return None
-        pos = int(mpos.group(1))
-        rest = mpos.group(2)
+        m = rgx.match(txt)
+        if not m:
+            continue
 
-        # găsește primul număr = played
-        mplayed = re.search(r"\b(\d{1,2})\b", rest)
-        if not mplayed:
-            return None
-        team = rest[:mplayed.start()].strip()
+        pos = int(m.group(1))
+        team = m.group(2).strip()
+        played = int(m.group(3))
+        win = int(m.group(4))
+        draw = int(m.group(5))
+        loss = int(m.group(6))
+        gf = int(m.group(7))
+        ga = int(m.group(8))
+        gd = gf - ga
+        points = int(m.group(10))  # puncte reale
+        adevar = int(m.group(12)) if m.group(12) is not None else None
 
-        nums = re.findall(r"-?\d+", rest[mplayed.start():])
-        if len(nums) < 5:
-            return None
-
-        played = int(nums[0])
-        win = int(nums[1]) if len(nums) > 1 else None
-        draw = int(nums[2]) if len(nums) > 2 else None
-        loss = int(nums[3]) if len(nums) > 3 else None
-
-        mg = re.search(r"(\d{1,2})\s*-\s*(\d{1,2})", rest)
-        gf = ga = None
-        if mg:
-            gf = int(mg.group(1))
-            ga = int(mg.group(2))
-
-        points = int(nums[-1])
-        gd = (gf - ga) if (gf is not None and ga is not None) else None
-
-        if not team:
-            return None
-
-        return {
+        standings.append({
             "position": pos,
             "team": team,
             "played": played,
@@ -284,23 +288,9 @@ def parse_standings_from_lpf2() -> Tuple[List[Dict], str]:
             "ga": ga,
             "gd": gd,
             "points": points,
-        }
+            "adevar": adevar,  # opțional, ca să-l ai dacă vrei
+        })
 
-    if best_rows:
-        for tr in best_rows:
-            row = parse_row_text(tr.get_text(" ", strip=True))
-            if row:
-                standings.append(row)
-    else:
-        # fallback text
-        lines = soup_text_lines(html)
-        for ln in lines:
-            if re.match(r"^\d{1,2}\s*\w", ln):
-                row = parse_row_text(ln)
-                if row:
-                    standings.append(row)
-
-    standings = [s for s in standings if s.get("team")]
     standings.sort(key=lambda x: x["position"])
     if len(standings) >= 12:
         return standings, "lpf2_ok"
@@ -323,7 +313,7 @@ def write_json_if_changed(path: str, obj) -> bool:
             old_str = stable_dumps(old_obj)
             old_hash = sha256_str(old_str)
             if old_hash == new_hash:
-                return False  # no change
+                return False
         except Exception:
             pass
 
@@ -344,14 +334,13 @@ def read_existing(path: str):
 def main():
     os.makedirs(OUTDIR, exist_ok=True)
 
-    # ---- STANDINGS (LPF2) ----
     standings, standings_status = parse_standings_from_lpf2()
 
-    # ---- MATCHES (LPF) ----
     fixtures = None
     results = None
     current_round = None
     matches_status = "not_started"
+    rounds_fetched = None
 
     try:
         liga1_html = fetch_html(LPF_LIGA1_URL)
@@ -360,6 +349,7 @@ def main():
 
         start_r = max(1, current_round - PAST_ROUNDS)
         end_r = min(MAX_ROUNDS, current_round + FUTURE_ROUNDS)
+        rounds_fetched = {"from": start_r, "to": end_r}
 
         all_matches = []
         for r in range(start_r, end_r + 1):
@@ -373,28 +363,23 @@ def main():
 
         matches_status = f"lpf_ok_rounds:{start_r}-{end_r}"
     except Exception as e:
-        # dacă LPF blochează runner-ul, NU stricăm fișierele existente
         matches_status = f"lpf_failed:{type(e).__name__}"
         fixtures = read_existing(os.path.join(OUTDIR, "fixtures.json"))
         results = read_existing(os.path.join(OUTDIR, "results.json"))
 
-    # dacă nici standings nu s-a putut lua, păstrăm vechiul
     if not standings:
         prev = read_existing(os.path.join(OUTDIR, "standings.json"))
         if isinstance(prev, list) and prev:
             standings = prev
 
-    # meta: îl schimbăm doar dacă se schimbă efectiv datele (prin write_json_if_changed)
     meta = {
         "competition": "SuperLiga (LPF + LPF2)",
         "season": SEASON,
         "sources": {"matches": "lpf.ro", "standings": "lpf2.ro"},
         "generated_utc": iso_now(),
         "current_round": current_round,
-        "status": {
-            "matches": matches_status,
-            "standings": standings_status,
-        },
+        "rounds_fetched": rounds_fetched,
+        "status": {"matches": matches_status, "standings": standings_status},
         "counts": {
             "fixtures": len(fixtures) if isinstance(fixtures, list) else 0,
             "results": len(results) if isinstance(results, list) else 0,
@@ -410,7 +395,6 @@ def main():
     if isinstance(standings, list):
         changed |= write_json_if_changed(os.path.join(OUTDIR, "standings.json"), standings)
 
-    # scriem meta doar dacă s-a schimbat ceva (ca să nu facă commit mereu)
     if changed:
         write_json_if_changed(os.path.join(OUTDIR, "meta.json"), meta)
 
