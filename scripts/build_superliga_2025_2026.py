@@ -10,8 +10,10 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from bs4 import BeautifulSoup
 
-SCRIPT_VERSION = "2026-02-09_v1_FORCE_RUN"
-
+# =========================
+# VERSION MARKER (IMPORTANT)
+# =========================
+SCRIPT_VERSION = "2026-02-09_force_v2"
 
 SEASON = "2025-2026"
 OUTDIR = os.path.join("public", "superliga", SEASON)
@@ -22,14 +24,16 @@ PAST_ROUNDS = 2
 FUTURE_ROUNDS = 4
 MAX_ROUNDS = 30
 
-UA = "Mozilla/5.0 (compatible; superliga-api-bot/4.0; +https://github.com/spyderu/superliga-api)"
+UA = "Mozilla/5.0 (compatible; superliga-api-bot/4.1; +https://github.com/spyderu/superliga-api)"
 
 RO_MONTH_FULL = {
     "ianuarie": 1, "februarie": 2, "martie": 3, "aprilie": 4, "mai": 5, "iunie": 6,
     "iulie": 7, "august": 8, "septembrie": 9, "octombrie": 10, "noiembrie": 11, "decembrie": 12,
 }
 
-# === HTTP ===
+# -------------------------
+# HTTP
+# -------------------------
 def make_session() -> requests.Session:
     s = requests.Session()
     retries = Retry(
@@ -52,7 +56,9 @@ def fetch_html(url: str) -> str:
     r.raise_for_status()
     return r.text
 
-# === IO helpers ===
+# -------------------------
+# IO helpers
+# -------------------------
 def iso_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -61,6 +67,11 @@ def stable_dumps(obj) -> str:
 
 def sha256_str(s: str) -> str:
     return hashlib.sha256(s.encode("utf-8")).hexdigest()
+
+def write_json(path: str, obj) -> None:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(obj, f, ensure_ascii=False, indent=2)
 
 def write_json_if_changed(path: str, obj) -> bool:
     new_str = stable_dumps(obj)
@@ -77,9 +88,7 @@ def write_json_if_changed(path: str, obj) -> bool:
         except Exception:
             pass
 
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(obj, f, ensure_ascii=False, indent=2)
+    write_json(path, obj)
     return True
 
 def read_existing(path: str):
@@ -91,12 +100,13 @@ def read_existing(path: str):
     except Exception:
         return None
 
-# === Parsing ===
+# -------------------------
+# Parsing helpers
+# -------------------------
 def norm_space(s: str) -> str:
     return re.sub(r"\s+", " ", s.strip())
 
 def parse_ro_datetime(date_str: str, time_str: str) -> Tuple[str, str]:
-    # "06 Februarie 2026" + "17:00"
     m = re.match(r"^\s*(\d{1,2})\s+([A-Za-zăâîșțĂÂÎȘȚ]+)\s+(\d{4})\s*$", date_str.strip(), re.UNICODE)
     if not m:
         raise ValueError(f"Bad date: {date_str}")
@@ -125,7 +135,7 @@ def match_obj(round_no: int, dateEvent: str, timeEvent: str,
         "status": status,
         "score": {"home": hs, "away": as_},
 
-        # alias pt UI
+        # alias pt aplicație
         "homeTeam": home,
         "awayTeam": away,
         "played": played,
@@ -136,13 +146,6 @@ def match_obj(round_no: int, dateEvent: str, timeEvent: str,
         "source_league_id": "lpf2.ro",
     }
 
-def extract_lines_from_etapa(round_no: int) -> List[str]:
-    html = fetch_html(LPF2_ETAPA_URL.format(n=round_no))
-    soup = BeautifulSoup(html, "lxml")
-    lines = [ln.strip() for ln in soup.get_text("\n").splitlines() if ln.strip()]
-    return [norm_space(ln) for ln in lines]
-
-# regex EXACT pe format LPF2 (din Etapa-26 / Etapa-27)
 RGX_FINISHED = re.compile(
     r"^(\d{1,2}\s+[A-Za-zăâîșțĂÂÎȘȚ]+\s+\d{4}),\s*(\d{1,2}:\d{2})\s+(.+?)\s+(\d{1,2})-(\d{1,2})\s+(.+)$",
     re.UNICODE
@@ -151,6 +154,12 @@ RGX_SCHEDULED = re.compile(
     r"^(\d{1,2}\s+[A-Za-zăâîșțĂÂÎȘȚ]+\s+\d{4}),\s*(\d{1,2}:\d{2})\s+(.+?)\s+-\s+(.+)$",
     re.UNICODE
 )
+
+def extract_lines_from_etapa(round_no: int) -> List[str]:
+    html = fetch_html(LPF2_ETAPA_URL.format(n=round_no))
+    soup = BeautifulSoup(html, "lxml")
+    lines = [ln.strip() for ln in soup.get_text("\n").splitlines() if ln.strip()]
+    return [norm_space(ln) for ln in lines]
 
 def extract_matches_from_round(round_no: int) -> List[Dict]:
     lines = extract_lines_from_etapa(round_no)
@@ -186,16 +195,14 @@ def extract_matches_from_round(round_no: int) -> List[Dict]:
         uniq.append(mm)
     return uniq
 
-# standings from the "Clasamentul etapei..." block in Etapa page
-RGX_STAND = re.compile(
-    r"^(\d{1,2})([A-Za-z0-9ăâîșțĂÂÎȘȚ .'-]+?)\s+(\d{1,2})\s+(\d{1,2})\s+(\d{1,2})\s+(\d{1,2})\s+(\d{1,3})-(\d{1,3})\s*\(([-+]?\d+)\)(\d{1,3}).*\(([-+]?\d+)\)\s*$",
-    re.UNICODE
-)
-
 def extract_standings_from_round(round_no: int) -> List[Dict]:
+    """
+    IMPORTANT: nu mai folosim 'textul întregii pagini'.
+    Luăm doar liniile de după headerul tabelului și potrivim STRICT 16 rânduri.
+    """
     lines = extract_lines_from_etapa(round_no)
 
-    # găsim blocul care începe după header-ul de tabel
+    # găsim header-ul tabelului de clasament
     start = None
     for i, ln in enumerate(lines):
         if ln.lower().startswith("pozitia echipa meciuri victorii"):
@@ -204,14 +211,23 @@ def extract_standings_from_round(round_no: int) -> List[Dict]:
     if start is None:
         return []
 
+    # rând de echipă în format LPF2 (din Etapa-26): ([lpf2.ro](https://lpf2.ro/html/etape/Etapa-26.html))
+    # 1 CS Universitatea Craiova 26 14 8 4 46-25 (21) 50 (25) (+11)
+    rgx = re.compile(
+        r"^(\d{1,2})\s+(.+?)\s+(\d{1,2})\s+(\d{1,2})\s+(\d{1,2})\s+(\d{1,2})\s+(\d{1,3})-(\d{1,3})\s*\(\s*([-+]?\d+)\s*\)\s+(\d{1,3})\s*\(\s*(\d{1,3})\s*\)\s*\(\s*([-+]?\d+)\s*\)\s*$",
+        re.UNICODE
+    )
+
     standings: List[Dict] = []
     for ln in lines[start:]:
-        # oprim când intră în meniu
-        if ln.lower().startswith("meniu principal"):
+        # stop când se termină tabelul (după ce luăm 16)
+        if len(standings) >= 16:
             break
-        m = RGX_STAND.match(ln)
+
+        m = rgx.match(ln)
         if not m:
             continue
+
         pos = int(m.group(1))
         team = norm_space(m.group(2))
         played = int(m.group(3))
@@ -222,7 +238,7 @@ def extract_standings_from_round(round_no: int) -> List[Dict]:
         ga = int(m.group(8))
         gd = gf - ga
         points = int(m.group(10))
-        adevar = int(m.group(11))
+        adevar = int(m.group(12))
 
         standings.append({
             "position": pos,
@@ -241,12 +257,11 @@ def extract_standings_from_round(round_no: int) -> List[Dict]:
     standings.sort(key=lambda x: x["position"])
     return standings
 
-def find_latest_round_with_standings() -> Tuple[int, str]:
-    # căutăm de la 30 în jos prima etapă care are 16 rânduri de clasament
+def find_latest_round_with_16_standings() -> Tuple[int, str]:
     for r in range(MAX_ROUNDS, 0, -1):
         try:
             st = extract_standings_from_round(r)
-            if len(st) >= 16:
+            if len(st) == 16:
                 return r, "latest_ok"
         except Exception:
             continue
@@ -255,17 +270,19 @@ def find_latest_round_with_standings() -> Tuple[int, str]:
 def main():
     os.makedirs(OUTDIR, exist_ok=True)
 
-    latest_round, latest_status = find_latest_round_with_standings()
+    # 1) găsim etapa curentă (prima etapă de sus în jos cu 16 echipe în clasament)
+    current_round, cr_status = find_latest_round_with_16_standings()
 
-    # standings (din etapa latest_round)
-    standings = extract_standings_from_round(latest_round)
-    if len(standings) < 16:
+    # 2) standings (din etapa curentă)
+    standings = extract_standings_from_round(current_round)
+    if len(standings) != 16:
         prev = read_existing(os.path.join(OUTDIR, "standings.json"))
-        if isinstance(prev, list) and prev:
+        if isinstance(prev, list) and len(prev) == 16:
             standings = prev
 
-    start_r = max(1, latest_round - PAST_ROUNDS)
-    end_r = min(MAX_ROUNDS, latest_round + FUTURE_ROUNDS)
+    # 3) meciuri din etape (curenta +/-)
+    start_r = max(1, current_round - PAST_ROUNDS)
+    end_r = min(MAX_ROUNDS, current_round + FUTURE_ROUNDS)
 
     all_matches: List[Dict] = []
     round_notes = []
@@ -273,18 +290,18 @@ def main():
     for r in range(start_r, end_r + 1):
         try:
             ms = extract_matches_from_round(r)
-            all_matches.extend(ms)
             round_notes.append({str(r): f"ok:{len(ms)}"})
+            all_matches.extend(ms)
         except Exception as e:
             round_notes.append({str(r): f"fail:{type(e).__name__}"})
 
-    # IMPORTANT: dacă parsing-ul a produs prea puțin, NU suprascriem cu gol
+    # dacă nu avem minim 8 meciuri total, păstrăm vechile fișiere
     if len(all_matches) >= 8:
         fixtures = [m for m in all_matches if m["status"] == "scheduled"]
         results = [m for m in all_matches if m["status"] == "finished"]
         fixtures.sort(key=lambda x: (x["dateEvent"], x["strTime"], x["home"], x["away"]))
         results.sort(key=lambda x: (x["dateEvent"], x["strTime"]), reverse=True)
-        matches_status = f"ok:{len(all_matches)}"
+        matches_status = f"ok_total:{len(all_matches)}"
     else:
         fixtures = read_existing(os.path.join(OUTDIR, "fixtures.json")) or []
         results = read_existing(os.path.join(OUTDIR, "results.json")) or []
@@ -293,12 +310,12 @@ def main():
     meta = {
         "competition": "SuperLiga",
         "season": SEASON,
-        "sources": {"matches": "lpf2.ro/html/etape", "standings": "lpf2.ro/html/etape (block)"},
+        "script_version": SCRIPT_VERSION,
         "generated_utc": iso_now(),
-        "current_round": latest_round,
+        "current_round": current_round,
         "rounds_fetched": {"from": start_r, "to": end_r},
         "status": {
-            "latest_round": latest_status,
+            "current_round": cr_status,
             "matches": matches_status,
             "rounds": round_notes,
         },
@@ -309,15 +326,14 @@ def main():
         },
     }
 
-    changed = False
-    changed |= write_json_if_changed(os.path.join(OUTDIR, "standings.json"), standings)
-    changed |= write_json_if_changed(os.path.join(OUTDIR, "fixtures.json"), fixtures)
-    changed |= write_json_if_changed(os.path.join(OUTDIR, "results.json"), results)
-    if changed:
-        write_json_if_changed(os.path.join(OUTDIR, "meta.json"), meta)
+    # scriem fișierele (meta mereu, ca să vezi clar că a rulat codul)
+    write_json_if_changed(os.path.join(OUTDIR, "standings.json"), standings)
+    write_json_if_changed(os.path.join(OUTDIR, "fixtures.json"), fixtures)
+    write_json_if_changed(os.path.join(OUTDIR, "results.json"), results)
+    write_json_if_changed(os.path.join(OUTDIR, "meta.json"), meta)
 
+    print("SCRIPT_VERSION:", SCRIPT_VERSION)
     print("OK", meta)
 
 if __name__ == "__main__":
     main()
-
