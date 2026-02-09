@@ -13,30 +13,18 @@ from bs4 import BeautifulSoup
 SEASON = "2025-2026"
 OUTDIR = os.path.join("public", "superliga", SEASON)
 
-# LPF2: etape + clasament (stabil pe GitHub Actions)
 LPF2_HOME = "https://lpf2.ro/"
 LPF2_ETAPA_URL = "https://lpf2.ro/html/etape/Etapa-{n}.html"
-LPF2_STANDINGS_URL = "https://lpf2.ro/"
 
 PAST_ROUNDS = 2
 FUTURE_ROUNDS = 4
 MAX_ROUNDS = 30
 
-UA = "Mozilla/5.0 (compatible; superliga-api-bot/3.0; +https://github.com/spyderu/superliga-api)"
+UA = "Mozilla/5.0 (compatible; superliga-api-bot/3.1; +https://github.com/spyderu/superliga-api)"
 
 RO_MONTH_FULL = {
-    "ianuarie": 1,
-    "februarie": 2,
-    "martie": 3,
-    "aprilie": 4,
-    "mai": 5,
-    "iunie": 6,
-    "iulie": 7,
-    "august": 8,
-    "septembrie": 9,
-    "octombrie": 10,
-    "noiembrie": 11,
-    "decembrie": 12,
+    "ianuarie": 1, "februarie": 2, "martie": 3, "aprilie": 4, "mai": 5, "iunie": 6,
+    "iulie": 7, "august": 8, "septembrie": 9, "octombrie": 10, "noiembrie": 11, "decembrie": 12,
 }
 
 def iso_now() -> str:
@@ -103,7 +91,7 @@ def norm_team(s: str) -> str:
     return re.sub(r"\s+", " ", s.strip())
 
 def parse_ro_datetime(date_str: str, time_str: str) -> Tuple[str, str]:
-    # "06 Februarie 2026" + "17:00"
+    # date_str: "06 Februarie 2026" | time_str: "17:00"
     m = re.match(r"^\s*(\d{1,2})\s+([A-Za-zăâîșțĂÂÎȘȚ]+)\s+(\d{4})\s*$", date_str.strip(), re.UNICODE)
     if not m:
         raise ValueError(f"Bad date: {date_str}")
@@ -127,133 +115,87 @@ def match_obj(round_no: int, dateEvent: str, timeEvent: str, home: str, away: st
         "dateEvent": dateEvent,
         "strTime": timeEvent,
         "kickoff_raw": f"{dateEvent}T{timeEvent}",
-
         "home": home,
         "away": away,
         "status": status,
         "score": {"home": hs, "away": as_},
 
-        # alias-uri pentru aplicații
+        # alias pt aplicație
         "homeTeam": home,
         "awayTeam": away,
         "played": played,
         "intHomeScore": hs,
         "intAwayScore": as_,
 
-        "venue": None,
-        "city": None,
-        "event": {"strEvent": f"{home} vs {away}", "strLeague": "SuperLiga"},
         "source": "LPF2",
         "source_league_id": "lpf2.ro",
     }
 
-def get_current_round_from_lpf2_home() -> Tuple[int, str]:
+def extract_standings_from_lpf2() -> Tuple[List[Dict], str]:
     """
-    Aproximare practică: "current_round" ~= max(Meciuri jucate) din clasamentul live.
-    În etapa 26 se vede că multe echipe au 26 meciuri jucate (unele 25 din amânări). :contentReference[oaicite:3]{index=3}
+    IMPORTANT: nu mai parsăm textul întregii pagini.
+    Căutăm un <table> care are headere: Pozitia, Echipa, Meciuri, ... Puncte
+    și extragem doar rândurile lui.
     """
     try:
         html = fetch_html(LPF2_HOME)
     except Exception as e:
-        return 1, f"home_fetch_failed:{type(e).__name__}"
+        return [], f"standings_fetch_failed:{type(e).__name__}"
 
     soup = BeautifulSoup(html, "lxml")
-    txt = soup.get_text(" ", strip=True)
 
-    # caută secvențe de tip "... Craiova26 14 8 4 ..."
-    played_vals = [int(x) for x in re.findall(r"\b(1?\d|2\d|3\d)\b(?=\s+\d{1,2}\s+\d{1,2}\s+\d{1,2}\s+\d{1,3}-\d{1,3})", txt)]
-    if not played_vals:
-        return 1, "home_no_played_found"
+    target_table = None
+    for t in soup.find_all("table"):
+        hdr = t.get_text(" ", strip=True).lower()
+        if "pozitia" in hdr and "echipa" in hdr and "puncte" in hdr:
+            target_table = t
+            break
 
-    # max e de regulă etapa curentă
-    return max(played_vals), "home_ok"
+    if target_table is None:
+        return [], "standings_table_not_found"
 
-def extract_matches_from_lpf2_round(round_no: int) -> Tuple[List[Dict], str]:
-    url = LPF2_ETAPA_URL.format(n=round_no)
-    try:
-        html = fetch_html(url)
-    except Exception as e:
-        return [], f"round_fetch_failed:{round_no}:{type(e).__name__}"
+    rows = target_table.find_all("tr")
+    out: List[Dict] = []
 
-    soup = BeautifulSoup(html, "lxml")
-    lines = [ln.strip() for ln in soup.get_text("\n").splitlines() if ln.strip()]
-
-    matches: List[Dict] = []
-
-    # Exemple în text (din pagina Etapa 26/27): :contentReference[oaicite:4]{index=4}
-    # "06 Februarie 2026, 17:00 FC Arges 3-1 FC Hermannstadt"
-    # "09 Februarie 2026, 20:00 Dinamo Bucuresti - CS Universitatea Craiova"
-    rgx_finished = re.compile(r"^(\d{1,2}\s+[A-Za-zăâîșțĂÂÎȘȚ]+\s+\d{4}),\s*(\d{1,2}:\d{2})\s+(.+?)\s+(\d{1,2})-(\d{1,2})\s+(.+)$", re.UNICODE)
-    rgx_sched = re.compile(r"^(\d{1,2}\s+[A-Za-zăâîșțĂÂÎȘȚ]+\s+\d{4}),\s*(\d{1,2}:\d{2})\s+(.+?)\s+-\s+(.+)$", re.UNICODE)
-
-    for ln in lines:
-        ln = re.sub(r"\s+", " ", ln).strip()
-
-        m = rgx_finished.match(ln)
-        if m:
-            date_str, time_str, home, hs, as_, away = m.groups()
-            try:
-                dateEvent, timeEvent = parse_ro_datetime(date_str, time_str)
-            except Exception:
-                continue
-            matches.append(match_obj(round_no, dateEvent, timeEvent, norm_team(home), norm_team(away), int(hs), int(as_)))
+    for tr in rows:
+        tds = tr.find_all(["td", "th"])
+        # ne așteptăm la ~9-10 coloane
+        cells = [re.sub(r"\s+", " ", td.get_text(" ", strip=True)) for td in tds]
+        if not cells:
             continue
 
-        m = rgx_sched.match(ln)
-        if m:
-            date_str, time_str, home, away = m.groups()
-            try:
-                dateEvent, timeEvent = parse_ro_datetime(date_str, time_str)
-            except Exception:
-                continue
-            matches.append(match_obj(round_no, dateEvent, timeEvent, norm_team(home), norm_team(away), None, None))
+        # prima coloană trebuie să fie poziție numerică
+        if not re.fullmatch(r"\d{1,2}", cells[0]):
             continue
 
-    # dedupe
-    uniq = []
-    seen = set()
-    for mm in matches:
-        key = (mm["round"], mm["dateEvent"], mm["strTime"], mm["home"], mm["away"])
-        if key in seen:
+        # layout tipic: pos, echipa, meciuri, victorii, egaluri, infrangeri, golaveraj, puncte, adevar (uneori)
+        pos = int(cells[0])
+        team = norm_team(cells[1]) if len(cells) > 1 else ""
+        played = int(cells[2]) if len(cells) > 2 and cells[2].isdigit() else None
+        win = int(cells[3]) if len(cells) > 3 and cells[3].isdigit() else None
+        draw = int(cells[4]) if len(cells) > 4 and cells[4].isdigit() else None
+        loss = int(cells[5]) if len(cells) > 5 and cells[5].isdigit() else None
+
+        gf = ga = gd = None
+        if len(cells) > 6:
+            mg = re.match(r"^\s*(\d{1,3})\s*-\s*(\d{1,3})\s*$", cells[6])
+            if mg:
+                gf = int(mg.group(1))
+                ga = int(mg.group(2))
+                gd = gf - ga
+
+        points = None
+        if len(cells) > 7 and re.fullmatch(r"-?\d{1,3}", cells[7]):
+            points = int(cells[7])
+
+        adevar = None
+        if len(cells) > 8 and re.fullmatch(r"-?\d{1,3}", cells[8]):
+            adevar = int(cells[8])
+
+        if not team or points is None:
             continue
-        seen.add(key)
-        uniq.append(mm)
 
-    return uniq, "round_ok"
-
-def parse_standings_from_lpf2() -> Tuple[List[Dict], str]:
-    """
-    Fix: extrage PUNCTE reale (nu Adevăr).
-    Format tipic: "46-25 (21)50 (25)(+11)" => points=50, adevar=+11. :contentReference[oaicite:5]{index=5}
-    """
-    try:
-        html = fetch_html(LPF2_STANDINGS_URL)
-    except Exception as e:
-        return [], f"lpf2_fetch_failed:{type(e).__name__}"
-
-    soup = BeautifulSoup(html, "lxml")
-    txt = soup.get_text(" ", strip=True)
-
-    rgx = re.compile(
-        r"\b(\d{1,2})\s*([A-Za-z0-9ăâîșțĂÂÎȘȚ .'-]+?)\s+(\d{1,2})\s+(\d{1,2})\s+(\d{1,2})\s+(\d{1,2})\s+(\d{1,3})-(\d{1,3})\s*\(\s*([+-]?\d+)\s*\)\s*(\d{1,3})\s*\(\s*(\d{1,3})\s*\)\s*\(\s*([+-]?\d+)\s*\)",
-        re.UNICODE
-    )
-
-    standings = []
-    for m in rgx.finditer(txt):
-        pos = int(m.group(1))
-        team = norm_team(m.group(2))
-        played = int(m.group(3))
-        win = int(m.group(4))
-        draw = int(m.group(5))
-        loss = int(m.group(6))
-        gf = int(m.group(7))
-        ga = int(m.group(8))
-        gd = int(m.group(9))
-        points = int(m.group(10))
-        adevar = int(m.group(12))
-
-        standings.append({
+        out.append({
             "position": pos,
             "team": team,
             "played": played,
@@ -267,77 +209,166 @@ def parse_standings_from_lpf2() -> Tuple[List[Dict], str]:
             "adevar": adevar,
         })
 
-    standings.sort(key=lambda x: x["position"])
-    if len(standings) >= 12:
-        return standings, "lpf2_ok"
-    return standings, f"lpf2_incomplete:{len(standings)}"
+    if len(out) >= 12:
+        out.sort(key=lambda x: x["position"])
+        return out, "standings_ok"
+
+    return out, f"standings_incomplete:{len(out)}"
+
+def guess_current_round_from_standings(standings: List[Dict]) -> int:
+    # etapă curentă aproximată = max(played) în clasament
+    played_vals = [r.get("played") for r in standings if isinstance(r.get("played"), int)]
+    return max(played_vals) if played_vals else 1
+
+def extract_round_matches_lpf2(round_no: int) -> Tuple[List[Dict], str]:
+    """
+    Parsare structurată: încercăm să extragem din tabelele din Etapa-N.html.
+    Dacă nu găsim, întoarcem [] și status, dar NU stricăm fișierele existente.
+    """
+    url = LPF2_ETAPA_URL.format(n=round_no)
+    try:
+        html = fetch_html(url)
+    except Exception as e:
+        return [], f"round_fetch_failed:{round_no}:{type(e).__name__}"
+
+    soup = BeautifulSoup(html, "lxml")
+
+    # Strângem toate textele rândurilor din tabele; în Etapa-* există de regulă tabele pentru meciuri.
+    raw_rows = []
+    for t in soup.find_all("table"):
+        for tr in t.find_all("tr"):
+            cells = [re.sub(r"\s+", " ", td.get_text(" ", strip=True)) for td in tr.find_all(["td", "th"])]
+            if cells:
+                raw_rows.append(cells)
+
+    matches: List[Dict] = []
+    # Heuristic: rând cu dată+oră + echipe + scor sau "-"
+    # Acceptăm două formate:
+    # - [data, ora, gazde, scor, oaspeti]
+    # - [data, ora, gazde, hg, ag, oaspeti] (uneori scor separat)
+    for cells in raw_rows:
+        joined = " | ".join(cells).lower()
+        if "statistici" in joined:
+            continue
+
+        # caută data ro + ora
+        # ex: "06 Februarie 2026" și "17:00"
+        date_cell = None
+        time_cell = None
+        for c in cells:
+            if re.search(r"\b(ianuarie|februarie|martie|aprilie|mai|iunie|iulie|august|septembrie|octombrie|noiembrie|decembrie)\b", c.lower()):
+                date_cell = c
+            if re.fullmatch(r"\d{1,2}:\d{2}", c):
+                time_cell = c
+
+        if not date_cell or not time_cell:
+            continue
+
+        # echipe: luăm primele două celule care arată ca nume (au litere) și nu sunt data/ora
+        teams = [c for c in cells if c != date_cell and c != time_cell and any(ch.isalpha() for ch in c)]
+        if len(teams) < 2:
+            continue
+        home = norm_team(teams[0])
+        away = norm_team(teams[1])
+
+        # scor: căutăm "x y" sau "x-y" sau "-"
+        hs = as_ = None
+        score_found = False
+        for c in cells:
+            m = re.fullmatch(r"(\d{1,2})\s*-\s*(\d{1,2})", c)
+            if m:
+                hs, as_ = int(m.group(1)), int(m.group(2))
+                score_found = True
+                break
+        if not score_found:
+            # scor în două celule consecutive numeric
+            nums = [c for c in cells if re.fullmatch(r"\d{1,2}", c)]
+            if len(nums) >= 2:
+                hs, as_ = int(nums[0]), int(nums[1])
+                score_found = True
+            else:
+                # programat (fără scor)
+                hs, as_ = None, None
+
+        try:
+            dateEvent, timeEvent = parse_ro_datetime(date_cell, time_cell)
+        except Exception:
+            continue
+
+        matches.append(match_obj(round_no, dateEvent, timeEvent, home, away, hs, as_))
+
+    # dedupe
+    uniq = []
+    seen = set()
+    for m in matches:
+        key = (m["round"], m["dateEvent"], m["strTime"], m["home"], m["away"])
+        if key in seen:
+            continue
+        seen.add(key)
+        uniq.append(m)
+
+    # dacă nu am măcar 6-8 meciuri, considerăm că parsarea a eșuat
+    if len(uniq) < 6:
+        return [], f"round_parsed_too_few:{round_no}:{len(uniq)}"
+    return uniq, "round_ok"
 
 def main():
     os.makedirs(OUTDIR, exist_ok=True)
 
-    # determinăm etapa curentă din lpf2 (după meciuri jucate în clasament)
-    current_round, cr_status = get_current_round_from_lpf2_home()
-
-    start_r = max(1, current_round - PAST_ROUNDS)
-    end_r = min(MAX_ROUNDS, current_round + FUTURE_ROUNDS)
-
-    all_matches: List[Dict] = []
-    rounds_status = []
-
-    # adunăm meciuri din etape lpf2
-    try:
-        for r in range(start_r, end_r + 1):
-            ms, st = extract_matches_from_lpf2_round(r)
-            rounds_status.append({str(r): st})
-            all_matches.extend(ms)
-
-        fixtures = [m for m in all_matches if m["status"] == "scheduled"]
-        results = [m for m in all_matches if m["status"] == "finished"]
-
-        fixtures.sort(key=lambda x: (x["dateEvent"], x["strTime"], x["home"], x["away"]))
-        results.sort(key=lambda x: (x["dateEvent"], x["strTime"]), reverse=True)
-
-        matches_status = f"lpf2_ok_rounds:{start_r}-{end_r}"
-    except Exception as e:
-        matches_status = f"lpf2_failed:{type(e).__name__}"
-        fixtures = read_existing(os.path.join(OUTDIR, "fixtures.json"))
-        results = read_existing(os.path.join(OUTDIR, "results.json"))
-
-    # clasament
-    standings, standings_status = parse_standings_from_lpf2()
+    # 1) STANDINGS – stabil (tabel)
+    standings, standings_status = extract_standings_from_lpf2()
     if not standings:
         prev = read_existing(os.path.join(OUTDIR, "standings.json"))
         if isinstance(prev, list) and prev:
             standings = prev
 
+    current_round = guess_current_round_from_standings(standings)
+    start_r = max(1, current_round - PAST_ROUNDS)
+    end_r = min(MAX_ROUNDS, current_round + FUTURE_ROUNDS)
+
+    # 2) MATCHES – încercăm etapele din LPF2; dacă nu reușim, păstrăm vechile fișiere
+    all_matches: List[Dict] = []
+    rounds_status = []
+
+    for r in range(start_r, end_r + 1):
+        ms, st = extract_round_matches_lpf2(r)
+        rounds_status.append({str(r): st})
+        all_matches.extend(ms)
+
+    if len(all_matches) >= 10:
+        fixtures = [m for m in all_matches if m["status"] == "scheduled"]
+        results = [m for m in all_matches if m["status"] == "finished"]
+        fixtures.sort(key=lambda x: (x["dateEvent"], x["strTime"], x["home"], x["away"]))
+        results.sort(key=lambda x: (x["dateEvent"], x["strTime"]), reverse=True)
+        matches_status = f"matches_ok_rounds:{start_r}-{end_r}"
+    else:
+        fixtures = read_existing(os.path.join(OUTDIR, "fixtures.json")) or []
+        results = read_existing(os.path.join(OUTDIR, "results.json")) or []
+        matches_status = f"matches_kept_old (parsed={len(all_matches)})"
+
     meta = {
         "competition": "SuperLiga",
         "season": SEASON,
-        "sources": {"matches": "lpf2.ro/html/etape", "standings": "lpf2.ro"},
+        "sources": {"matches": "lpf2.ro/html/etape", "standings": "lpf2.ro (table)"},
         "generated_utc": iso_now(),
         "current_round": current_round,
         "rounds_fetched": {"from": start_r, "to": end_r},
         "status": {
-            "current_round": cr_status,
-            "matches": matches_status,
             "standings": standings_status,
+            "matches": matches_status,
             "rounds": rounds_status,
         },
         "counts": {
-            "fixtures": len(fixtures) if isinstance(fixtures, list) else 0,
-            "results": len(results) if isinstance(results, list) else 0,
-            "standings_rows": len(standings) if isinstance(standings, list) else 0,
+            "fixtures": len(fixtures),
+            "results": len(results),
+            "standings_rows": len(standings),
         },
     }
 
     changed = False
-    if isinstance(fixtures, list):
-        changed |= write_json_if_changed(os.path.join(OUTDIR, "fixtures.json"), fixtures)
-    if isinstance(results, list):
-        changed |= write_json_if_changed(os.path.join(OUTDIR, "results.json"), results)
-    if isinstance(standings, list):
-        changed |= write_json_if_changed(os.path.join(OUTDIR, "standings.json"), standings)
-
+    changed |= write_json_if_changed(os.path.join(OUTDIR, "standings.json"), standings)
+    changed |= write_json_if_changed(os.path.join(OUTDIR, "fixtures.json"), fixtures)
+    changed |= write_json_if_changed(os.path.join(OUTDIR, "results.json"), results)
     if changed:
         write_json_if_changed(os.path.join(OUTDIR, "meta.json"), meta)
 
