@@ -13,6 +13,11 @@
       "home": 1,
       "away": 1
     },
+    "homeTeam": "SC OTELUL Galati",
+    "awayTeam": "FCSB",
+    "played": true,
+    "intHomeScore": 1,
+    "intAwayScore": 1,
     "venue": null,
     "city": null,
     "event": {
@@ -36,6 +41,11 @@
       "home": 3,
       "away": 3
     },
+    "homeTeam": "FC CFR 1907 Cluj",
+    "awayTeam": "FC Universitatea Cluj",
+    "played": true,
+    "intHomeScore": 3,
+    "intAwayScore": 3,
     "venue": null,
     "city": null,
     "event": {
@@ -59,6 +69,11 @@
       "home": 2,
       "away": 2
     },
+    "homeTeam": "UNIREA SLOBOZIA",
+    "awayTeam": "FC FARUL Constanta",
+    "played": true,
+    "intHomeScore": 2,
+    "intAwayScore": 2,
     "venue": null,
     "city": null,
     "event": {
@@ -82,6 +97,11 @@
       "home": 3,
       "away": 1
     },
+    "homeTeam": "FC Argeș",
+    "awayTeam": "AFC Hermannstadt",
+    "played": true,
+    "intHomeScore": 3,
+    "intAwayScore": 1,
     "venue": null,
     "city": null,
     "event": {
@@ -105,6 +125,11 @@
       "home": 1,
       "away": 2
     },
+    "homeTeam": "Universitatea Craiova",
+    "awayTeam": "SC OTELUL Galati",
+    "played": true,
+    "intHomeScore": 1,
+    "intAwayScore": 2,
     "venue": null,
     "city": null,
     "event": {
@@ -128,6 +153,11 @@
       "home": 0,
       "away": 2
     },
+    "homeTeam": "UTA Arad",
+    "awayTeam": "FC CFR 1907 Cluj",
+    "played": true,
+    "intHomeScore": 0,
+    "intAwayScore": 2,
     "venue": null,
     "city": null,
     "event": {
@@ -151,6 +181,11 @@
       "home": 0,
       "away": 0
     },
+    "homeTeam": "AFC Hermannstadt",
+    "awayTeam": "FC RAPID",
+    "played": true,
+    "intHomeScore": 0,
+    "intAwayScore": 0,
     "venue": null,
     "city": null,
     "event": {
@@ -174,6 +209,11 @@
       "home": 1,
       "away": 3
     },
+    "homeTeam": "FC PETROLUL",
+    "awayTeam": "UNIREA SLOBOZIA",
+    "played": true,
+    "intHomeScore": 1,
+    "intAwayScore": 3,
     "venue": null,
     "city": null,
     "event": {
@@ -197,6 +237,11 @@
       "home": 1,
       "away": 0
     },
+    "homeTeam": "FCSB",
+    "awayTeam": "Csikszereda",
+    "played": true,
+    "intHomeScore": 1,
+    "intAwayScore": 0,
     "venue": null,
     "city": null,
     "event": {
@@ -220,6 +265,11 @@
       "home": 0,
       "away": 4
     },
+    "homeTeam": "FC RAPID",
+    "awayTeam": "FC Universitatea Cluj",
+    "played": true,
+    "intHomeScore": 0,
+    "intAwayScore": 4,
     "venue": null,
     "city": null,
     "event": {
@@ -243,6 +293,11 @@
       "home": 2,
       "away": 0
     },
+    "homeTeam": "UNIREA SLOBOZIA",
+    "awayTeam": "AFC Hermannstadt",
+    "played": true,
+    "intHomeScore": 2,
+    "intAwayScore": 0,
     "venue": null,
     "city": null,
     "event": {
@@ -266,6 +321,11 @@
       "home": 4,
       "away": 1
     },
+    "homeTeam": "FC CFR 1907 Cluj",
+    "awayTeam": "FC Metaloglobus",
+    "played": true,
+    "intHomeScore": 4,
+    "intAwayScore": 1,
     "venue": null,
     "city": null,
     "event": {

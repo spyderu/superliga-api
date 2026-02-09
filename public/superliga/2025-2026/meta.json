@@ -5,8 +5,12 @@
     "matches": "lpf.ro",
     "standings": "lpf2.ro"
   },
-  "generated_utc": "2026-02-09T20:18:26Z",
+  "generated_utc": "2026-02-09T20:57:04Z",
   "current_round": 26,
+  "rounds_fetched": {
+    "from": 24,
+    "to": 29
+  },
   "status": {
     "matches": "lpf_ok_rounds:24-29",
     "standings": "lpf2_ok"
