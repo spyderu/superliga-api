@@ -1,0 +1,38 @@
+name: Update SuperLiga 2025-2026
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"   # la 30 minute
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Generate JSON
+        run: |
+          python scripts/build_superliga_2025_2026.py
+
+      - name: Commit & push changes
+        run: |
+          git config user.name "superliga-bot"
+          git config user.email "superliga-bot@users.noreply.github.com"
+          git add public/superliga/2025-2026/*.json
+          git commit -m "Update SuperLiga data" || echo "No changes"
+          git push
