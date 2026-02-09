@@ -1,4 +1,5 @@
 {
+  "script_version": SCRIPT_VERSION,
   "competition": "SuperLiga",
   "season": "2025-2026",
   "sources": {
