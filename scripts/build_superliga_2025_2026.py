@@ -10,13 +10,16 @@ from bs4 import BeautifulSoup
 SEASON = "2025-2026"
 OUTDIR = os.path.join("public", "superliga", SEASON)
 
+# Meciuri: lpf.ro (etape)
 LPF_LIGA1_URL = "https://lpf.ro/liga-1"
 LPF_ETAPA_URL = "https://lpf.ro/etape-liga-1/{round}"
 
-# Câte etape citim la fiecare rulare (ca să nu lovim site-ul cu 30 requesturi)
+# Clasament: lpf2.ro (tabel simplu, stabil)
+LPF2_STANDINGS_URL = "https://lpf2.ro/"
+
 PAST_ROUNDS = 2
 FUTURE_ROUNDS = 3
-MAX_ROUNDS = 30  # sezon regulat tur-retur (LPF poate continua cu playoff/out, dar aici păstrăm 1..30)
+MAX_ROUNDS = 30  # sezon regulat (tur+retur). Dacă vrei, îl creștem mai târziu.
 
 UA = "Mozilla/5.0 (compatible; superliga-api-bot/1.0; +https://github.com/spyderu/superliga-api)"
 
@@ -33,36 +36,29 @@ def fetch_html(url: str) -> str:
     r.raise_for_status()
     return r.text
 
-def html_to_lines(html: str) -> List[str]:
+def soup_text_lines(html: str) -> List[str]:
     soup = BeautifulSoup(html, "lxml")
     text = soup.get_text("\n")
-    # normalize
     lines = [ln.strip() for ln in text.splitlines()]
-    lines = [ln for ln in lines if ln]  # drop empty
-    return lines
+    return [ln for ln in lines if ln]
 
 def parse_current_round(lines: List[str]) -> int:
-    # Exemplu: "Clasament SUPERLIGA - Etapa 26"
+    # Exemplu: "Etapa 26 SUPERLIGA" sau "Clasament SUPERLIGA - Etapa 26"
     for ln in lines:
         m = re.search(r"Clasament\s+SUPERLIGA\s*-\s*Etapa\s+(\d+)", ln, re.IGNORECASE)
         if m:
             return int(m.group(1))
-
-    # fallback: "Etapa 26 - Program"
     for ln in lines:
-        m = re.search(r"Etapa\s+(\d+)\s*-\s*Program", ln, re.IGNORECASE)
+        m = re.search(r"\bEtapa\s+(\d+)\b", ln, re.IGNORECASE)
         if m:
             return int(m.group(1))
-
-    # fallback: dacă nu găsim, presupunem 1
     return 1
 
 def is_datetime_line(ln: str) -> bool:
-    # ex: "6 feb 2026, 17:00"
+    # ex: "11 iul 2025, 19:00"
     return bool(re.match(r"^\d{1,2}\s+[a-zA-ZăâîșțĂÂÎȘȚ]{3}\s+\d{4},\s*\d{1,2}:\d{2}$", ln))
 
 def parse_datetime_ro(ln: str) -> Optional[Tuple[str, str]]:
-    # input: "6 feb 2026, 17:00" -> ("2026-02-06", "17:00:00")
     m = re.match(r"^(\d{1,2})\s+([a-zA-ZăâîșțĂÂÎȘȚ]{3})\s+(\d{4}),\s*(\d{1,2}):(\d{2})$", ln)
     if not m:
         return None
@@ -77,20 +73,10 @@ def parse_datetime_ro(ln: str) -> Optional[Tuple[str, str]]:
     return (dt.strftime("%Y-%m-%d"), dt.strftime("%H:%M:%S"))
 
 def is_noise_line(ln: str) -> bool:
-    # filtrează zgomot tipic din pagini LPF
-    bad = {
-        "image", "statistici", "data rezultat statistici", "etape tur", "etape retur",
-        "noutăți", "noutati", "utile", "contact", "superliga", "acasa", "acasă",
-    }
     l = ln.strip().lower()
-    if l in bad:
+    if l in {"data rezultat statistici", "statistici", "image", "etape tur", "etape retur"}:
         return True
-    # zilele săptămânii (RO)
     if l.startswith(("vineri", "sâmbătă", "sambata", "duminică", "duminica", "luni", "marți", "marti", "miercuri", "joi")):
-        # ex: "Vineri, 6 feb 2026" (nu e datetime, e header)
-        return True
-    # headers
-    if "locurile" in l and "play" in l:
         return True
     return False
 
@@ -106,91 +92,16 @@ def is_team_line(ln: str) -> bool:
     l = ln.strip()
     if len(l) < 2:
         return False
-    # nu vrem linii "MJ V E Î..." etc
     if re.match(r"^MJ\s+V\s+E", l):
         return False
-    # team line: conține litere, nu e doar cifre
-    has_letter = any(ch.isalpha() for ch in l)
-    if not has_letter:
-        return False
-    # evită linii care sunt doar "Etapa 26" etc
     if re.search(r"\bEtapa\b", l, re.IGNORECASE):
         return False
-    return True
+    return any(ch.isalpha() for ch in l)
 
-def extract_standings_from_lines(lines: List[str]) -> List[Dict]:
-    """
-    Parsează blocul de clasament din pagina LPF:
-    "Clasament SUPERLIGA - Etapa X"
-    urmat de rânduri care încep cu poziția.
-    """
-    # găsește start
-    start_idx = None
-    for i, ln in enumerate(lines):
-        if re.search(r"Clasament\s+SUPERLIGA\s*-\s*Etapa\s+\d+", ln, re.IGNORECASE):
-            start_idx = i
-            break
-    if start_idx is None:
-        return []
+def extract_matches_from_round(round_no: int) -> List[Dict]:
+    html = fetch_html(LPF_ETAPA_URL.format(round=round_no))
+    lines = soup_text_lines(html)
 
-    # bloc până la "Locurile ..." sau final
-    block = []
-    for ln in lines[start_idx + 1:]:
-        if re.search(r"Locurile\s+\d", ln, re.IGNORECASE):
-            break
-        block.append(ln)
-
-    standings = []
-    for ln in block:
-        # rând valid începe cu poziție (ex: "1 UNIVERSITATEA CRAIOVA 25 14 ... 49")
-        if not re.match(r"^\d{1,2}\s*", ln):
-            continue
-
-        # ia toate numerele cu poziții în string
-        nums = list(re.finditer(r"-?\d+", ln))
-        if len(nums) < 9:
-            continue
-
-        position = int(nums[0].group(0))
-        played = int(nums[1].group(0))
-        win = int(nums[2].group(0))
-        draw = int(nums[3].group(0))
-        loss = int(nums[4].group(0))
-        gf = int(nums[5].group(0))
-        ga = int(nums[6].group(0))
-        gd = int(nums[-2].group(0))
-        points = int(nums[-1].group(0))
-
-        # team name = text între finalul poziției și începutul "played"
-        team_raw = ln[nums[0].end():nums[1].start()].strip()
-        # curăță caractere non-text evidente
-        team = re.sub(r"[^\wăâîșțĂÂÎȘȚ .'\-]+", " ", team_raw).strip()
-        team = re.sub(r"\s{2,}", " ", team)
-
-        if not team:
-            continue
-
-        standings.append({
-            "position": position,
-            "team": team,
-            "played": played,
-            "win": win,
-            "draw": draw,
-            "loss": loss,
-            "gf": gf,
-            "ga": ga,
-            "gd": gd,
-            "points": points,
-        })
-
-    standings.sort(key=lambda x: x["position"])
-    return standings
-
-def extract_matches_from_lines(lines: List[str], round_no: int) -> List[Dict]:
-    """
-    Extrage meciurile din secțiunea de program a unei etape.
-    Se bazează pe modelul: datetime -> home team -> score -> away team -> score.
-    """
     matches = []
     i = 0
     while i < len(lines):
@@ -202,23 +113,21 @@ def extract_matches_from_lines(lines: List[str], round_no: int) -> List[Dict]:
                 continue
             dateEvent, timeEvent = dt
 
-            # caută home team
+            # home
             j = i + 1
-            while j < len(lines) and (is_noise_line(lines[j]) or is_score_token(lines[j]) or (":" in lines[j] and not is_team_line(lines[j]))):
+            while j < len(lines) and (is_noise_line(lines[j]) or is_score_token(lines[j])):
                 j += 1
             if j >= len(lines) or not is_team_line(lines[j]):
                 i += 1
                 continue
             home = lines[j].strip()
 
-            # caută home score (prima apariție de token scor după home)
+            # home score
             k = j + 1
             while k < len(lines) and not is_score_token(lines[k]):
-                # skip "Statistici", imagini, etc
                 if is_noise_line(lines[k]):
                     k += 1
                     continue
-                # uneori apare ora "20:00" singură; o ignorăm
                 if re.fullmatch(r"\d{1,2}:\d{2}", lines[k].strip()):
                     k += 1
                     continue
@@ -228,16 +137,16 @@ def extract_matches_from_lines(lines: List[str], round_no: int) -> List[Dict]:
                 continue
             hs_tok = lines[k].strip()
 
-            # caută away team
+            # away
             a = k + 1
-            while a < len(lines) and (is_noise_line(lines[a]) or is_score_token(lines[a]) or is_datetime_line(lines[a]) or re.fullmatch(r"\d{1,2}:\d{2}", lines[a].strip())):
+            while a < len(lines) and (is_noise_line(lines[a]) or is_score_token(lines[a]) or is_datetime_line(lines[a])):
                 a += 1
             if a >= len(lines) or not is_team_line(lines[a]):
                 i += 1
                 continue
             away = lines[a].strip()
 
-            # caută away score token după away
+            # away score
             b = a + 1
             while b < len(lines) and not is_score_token(lines[b]):
                 if is_noise_line(lines[b]):
@@ -254,7 +163,6 @@ def extract_matches_from_lines(lines: List[str], round_no: int) -> List[Dict]:
 
             hs = None if hs_tok == "-" else int(hs_tok)
             a_s = None if as_tok == "-" else int(as_tok)
-
             status = "scheduled" if (hs is None or a_s is None) else "finished"
 
             matches.append({
@@ -280,7 +188,7 @@ def extract_matches_from_lines(lines: List[str], round_no: int) -> List[Dict]:
 
         i += 1
 
-    # dedupe simplu (în caz de repetări în text)
+    # dedupe
     seen = set()
     uniq = []
     for m in matches:
@@ -291,6 +199,112 @@ def extract_matches_from_lines(lines: List[str], round_no: int) -> List[Dict]:
         uniq.append(m)
     return uniq
 
+def parse_standings_from_lpf2() -> Tuple[List[Dict], str]:
+    """
+    LPF2 are text/tabel simplu. Extragem rândurile:
+    Pozitia Echipa Meciuri Victorii Egaluri Infrangeri Golaveraj Puncte (eventual Adevar)
+    """
+    try:
+        html = fetch_html(LPF2_STANDINGS_URL)
+    except Exception as e:
+        return [], f"fetch_failed: {type(e).__name__}"
+
+    soup = BeautifulSoup(html, "lxml")
+
+    # varianta 1: căutăm un tabel propriu-zis
+    tables = soup.find_all("table")
+    best_rows = []
+    for t in tables:
+        rows = t.find_all("tr")
+        if len(rows) < 5:
+            continue
+        text = t.get_text(" ", strip=True).lower()
+        if "pozitia" in text and ("meciuri" in text or "puncte" in text):
+            best_rows = rows
+            break
+
+    standings = []
+
+    def parse_row_text(txt: str) -> Optional[Dict]:
+        # încercăm să prindem: pos team played win draw loss gf-ga points
+        # Exemplu tipic: "1CS Universitatea Craiova26 14 8 4 46-25 (21)50 (25)(+11)"
+        # Ne interesează primele câmpuri stabile.
+        txt = re.sub(r"\s+", " ", txt).strip()
+        # position la început
+        mpos = re.match(r"^(\d{1,2})\s*(.*)$", txt)
+        if not mpos:
+            return None
+        pos = int(mpos.group(1))
+        rest = mpos.group(2)
+
+        # găsește primul număr (played) în rest
+        mplayed = re.search(r"\b(\d{1,2})\b", rest)
+        if not mplayed:
+            return None
+        team = rest[:mplayed.start()].strip()
+        nums = re.findall(r"-?\d+", rest[mplayed.start():])
+
+        if len(nums) < 7:
+            return None
+
+        played = int(nums[0])
+        win = int(nums[1])
+        draw = int(nums[2])
+        loss = int(nums[3])
+
+        # golaveraj apare ca "46-25"
+        mg = re.search(r"(\d{1,2})\s*-\s*(\d{1,2})", rest)
+        gf = ga = None
+        if mg:
+            gf = int(mg.group(1))
+            ga = int(mg.group(2))
+
+        # points: de obicei primul număr mare după paranteze (luăm ultimul din nums ca fallback)
+        points = int(nums[-1])
+
+        gd = None
+        if gf is not None and ga is not None:
+            gd = gf - ga
+
+        if not team:
+            return None
+
+        return {
+            "position": pos,
+            "team": team,
+            "played": played,
+            "win": win,
+            "draw": draw,
+            "loss": loss,
+            "gf": gf,
+            "ga": ga,
+            "gd": gd,
+            "points": points,
+        }
+
+    if best_rows:
+        # parse din tabel
+        for tr in best_rows:
+            ttxt = tr.get_text(" ", strip=True)
+            row = parse_row_text(ttxt)
+            if row:
+                standings.append(row)
+    else:
+        # varianta 2: parse din text (fallback)
+        lines = soup_text_lines(html)
+        # colectăm linii care par să înceapă cu poziție
+        for ln in lines:
+            if re.match(r"^\d{1,2}\s*\w", ln):
+                row = parse_row_text(ln)
+                if row:
+                    standings.append(row)
+
+    standings = [s for s in standings if s.get("team")]
+    standings.sort(key=lambda x: x["position"])
+    if len(standings) >= 12:
+        return standings, "lpf2_ok"
+    return standings, f"lpf2_incomplete:{len(standings)}"
+
 def write_json(path: str, obj):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
@@ -299,37 +313,34 @@ def write_json(path: str, obj):
 def main():
     os.makedirs(OUTDIR, exist_ok=True)
 
-    # 1) Pagina principală LPF -> aflăm etapa curentă + luăm clasamentul complet
+    # Curent round (din lpf.ro) – doar ca să știm ce etape să citim
     liga1_html = fetch_html(LPF_LIGA1_URL)
-    liga1_lines = html_to_lines(liga1_html)
+    liga1_lines = soup_text_lines(liga1_html)
     current_round = parse_current_round(liga1_lines)
 
-    standings = extract_standings_from_lines(liga1_lines)
-
-    # 2) Citim câteva etape în jurul etapei curente
     start_r = max(1, current_round - PAST_ROUNDS)
     end_r = min(MAX_ROUNDS, current_round + FUTURE_ROUNDS)
 
     all_matches = []
     for r in range(start_r, end_r + 1):
-        html = fetch_html(LPF_ETAPA_URL.format(round=r))
-        lines = html_to_lines(html)
-        all_matches.extend(extract_matches_from_lines(lines, r))
+        all_matches.extend(extract_matches_from_round(r))
 
-    # 3) Separăm fixtures/results
     fixtures = [m for m in all_matches if m["status"] == "scheduled"]
     results = [m for m in all_matches if m["status"] == "finished"]
 
     fixtures.sort(key=lambda x: (x["dateEvent"], x["strTime"], x["home"], x["away"]))
     results.sort(key=lambda x: (x["dateEvent"], x["strTime"]), reverse=True)
 
+    standings, standings_status = parse_standings_from_lpf2()
+
     meta = {
         "competition": "SuperLiga (LPF)",
         "season": SEASON,
-        "source": "LPF",
+        "sources": {"matches": "lpf.ro", "standings": "lpf2.ro"},
         "generated_utc": iso_now(),
         "current_round": current_round,
         "rounds_fetched": {"from": start_r, "to": end_r},
+        "standings_status": standings_status,
         "counts": {
             "fixtures": len(fixtures),
             "results": len(results),
