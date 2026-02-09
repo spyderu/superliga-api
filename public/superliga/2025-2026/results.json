@@ -1,48 +1,255 @@
 [
   {
-    "idEvent": "2276363",
+    "idEvent": null,
     "season": "2025-2026",
     "round": "26",
-    "dateEvent": "2026-02-09",
-    "strTime": "18:00:00",
-    "kickoff_raw": "2026-02-09T18:00:00",
-    "home": "Dinamo București",
-    "away": "Universitatea Craiova",
+    "dateEvent": "2026-02-07",
+    "strTime": "20:00:00",
+    "kickoff_raw": "2026-02-07T20:00:00",
+    "home": "FC CFR 1907 Cluj",
+    "away": "FC Universitatea Cluj",
     "status": "finished",
     "score": {
-      "home": 1,
-      "away": 1
+      "home": 3,
+      "away": 3
     },
-    "venue": "Stadionul Arcul de Triumf",
+    "venue": null,
     "city": null,
     "event": {
-      "strEvent": "Dinamo București vs Universitatea Craiova",
-      "strLeague": "Romanian Liga I"
+      "strEvent": "FC CFR 1907 Cluj vs FC Universitatea Cluj",
+      "strLeague": "SuperLiga"
     },
-    "source": "TheSportsDB",
-    "source_league_id": "4691"
+    "source": "LPF",
+    "source_league_id": "lpf.ro"
   },
   {
-    "idEvent": "2276362",
+    "idEvent": null,
     "season": "2025-2026",
     "round": "26",
-    "dateEvent": "2026-02-08",
+    "dateEvent": "2026-02-07",
+    "strTime": "13:00:00",
+    "kickoff_raw": "2026-02-07T13:00:00",
+    "home": "UNIREA SLOBOZIA",
+    "away": "FC FARUL Constanta",
+    "status": "finished",
+    "score": {
+      "home": 2,
+      "away": 2
+    },
+    "venue": null,
+    "city": null,
+    "event": {
+      "strEvent": "UNIREA SLOBOZIA vs FC FARUL Constanta",
+      "strLeague": "SuperLiga"
+    },
+    "source": "LPF",
+    "source_league_id": "lpf.ro"
+  },
+  {
+    "idEvent": null,
+    "season": "2025-2026",
+    "round": "26",
+    "dateEvent": "2026-02-06",
+    "strTime": "17:00:00",
+    "kickoff_raw": "2026-02-06T17:00:00",
+    "home": "FC Argeș",
+    "away": "AFC Hermannstadt",
+    "status": "finished",
+    "score": {
+      "home": 3,
+      "away": 1
+    },
+    "venue": null,
+    "city": null,
+    "event": {
+      "strEvent": "FC Argeș vs AFC Hermannstadt",
+      "strLeague": "SuperLiga"
+    },
+    "source": "LPF",
+    "source_league_id": "lpf.ro"
+  },
+  {
+    "idEvent": null,
+    "season": "2025-2026",
+    "round": "25",
+    "dateEvent": "2026-02-05",
     "strTime": "18:00:00",
-    "kickoff_raw": "2026-02-08T18:00:00",
-    "home": "Oțelul Galați",
-    "away": "FCSB",
+    "kickoff_raw": "2026-02-05T18:00:00",
+    "home": "Universitatea Craiova",
+    "away": "SC OTELUL Galati",
     "status": "finished",
     "score": {
       "home": 1,
-      "away": 4
+      "away": 2
     },
-    "venue": "Stadionul Oţelul",
+    "venue": null,
     "city": null,
     "event": {
-      "strEvent": "Oțelul Galați vs FCSB",
-      "strLeague": "Romanian Liga I"
+      "strEvent": "Universitatea Craiova vs SC OTELUL Galati",
+      "strLeague": "SuperLiga"
     },
-    "source": "TheSportsDB",
-    "source_league_id": "4691"
+    "source": "LPF",
+    "source_league_id": "lpf.ro"
+  },
+  {
+    "idEvent": null,
+    "season": "2025-2026",
+    "round": "25",
+    "dateEvent": "2026-02-04",
+    "strTime": "18:00:00",
+    "kickoff_raw": "2026-02-04T18:00:00",
+    "home": "UTA Arad",
+    "away": "FC CFR 1907 Cluj",
+    "status": "finished",
+    "score": {
+      "home": 0,
+      "away": 2
+    },
+    "venue": null,
+    "city": null,
+    "event": {
+      "strEvent": "UTA Arad vs FC CFR 1907 Cluj",
+      "strLeague": "SuperLiga"
+    },
+    "source": "LPF",
+    "source_league_id": "lpf.ro"
+  },
+  {
+    "idEvent": null,
+    "season": "2025-2026",
+    "round": "25",
+    "dateEvent": "2026-02-03",
+    "strTime": "20:30:00",
+    "kickoff_raw": "2026-02-03T20:30:00",
+    "home": "AFC Hermannstadt",
+    "away": "FC RAPID",
+    "status": "finished",
+    "score": {
+      "home": 0,
+      "away": 0
+    },
+    "venue": null,
+    "city": null,
+    "event": {
+      "strEvent": "AFC Hermannstadt vs FC RAPID",
+      "strLeague": "SuperLiga"
+    },
+    "source": "LPF",
+    "source_league_id": "lpf.ro"
+  },
+  {
+    "idEvent": null,
+    "season": "2025-2026",
+    "round": "25",
+    "dateEvent": "2026-02-03",
+    "strTime": "16:00:00",
+    "kickoff_raw": "2026-02-03T16:00:00",
+    "home": "FC PETROLUL",
+    "away": "UNIREA SLOBOZIA",
+    "status": "finished",
+    "score": {
+      "home": 1,
+      "away": 3
+    },
+    "venue": null,
+    "city": null,
+    "event": {
+      "strEvent": "FC PETROLUL vs UNIREA SLOBOZIA",
+      "strLeague": "SuperLiga"
+    },
+    "source": "LPF",
+    "source_league_id": "lpf.ro"
+  },
+  {
+    "idEvent": null,
+    "season": "2025-2026",
+    "round": "24",
+    "dateEvent": "2026-02-01",
+    "strTime": "20:00:00",
+    "kickoff_raw": "2026-02-01T20:00:00",
+    "home": "FCSB",
+    "away": "Csikszereda",
+    "status": "finished",
+    "score": {
+      "home": 1,
+      "away": 0
+    },
+    "venue": null,
+    "city": null,
+    "event": {
+      "strEvent": "FCSB vs Csikszereda",
+      "strLeague": "SuperLiga"
+    },
+    "source": "LPF",
+    "source_league_id": "lpf.ro"
+  },
+  {
+    "idEvent": null,
+    "season": "2025-2026",
+    "round": "24",
+    "dateEvent": "2026-01-31",
+    "strTime": "20:00:00",
+    "kickoff_raw": "2026-01-31T20:00:00",
+    "home": "FC RAPID",
+    "away": "FC Universitatea Cluj",
+    "status": "finished",
+    "score": {
+      "home": 0,
+      "away": 4
+    },
+    "venue": null,
+    "city": null,
+    "event": {
+      "strEvent": "FC RAPID vs FC Universitatea Cluj",
+      "strLeague": "SuperLiga"
+    },
+    "source": "LPF",
+    "source_league_id": "lpf.ro"
+  },
+  {
+    "idEvent": null,
+    "season": "2025-2026",
+    "round": "24",
+    "dateEvent": "2026-01-31",
+    "strTime": "14:30:00",
+    "kickoff_raw": "2026-01-31T14:30:00",
+    "home": "UNIREA SLOBOZIA",
+    "away": "AFC Hermannstadt",
+    "status": "finished",
+    "score": {
+      "home": 2,
+      "away": 0
+    },
+    "venue": null,
+    "city": null,
+    "event": {
+      "strEvent": "UNIREA SLOBOZIA vs AFC Hermannstadt",
+      "strLeague": "SuperLiga"
+    },
+    "source": "LPF",
+    "source_league_id": "lpf.ro"
+  },
+  {
+    "idEvent": null,
+    "season": "2025-2026",
+    "round": "24",
+    "dateEvent": "2026-01-30",
+    "strTime": "17:00:00",
+    "kickoff_raw": "2026-01-30T17:00:00",
+    "home": "FC CFR 1907 Cluj",
+    "away": "FC Metaloglobus",
+    "status": "finished",
+    "score": {
+      "home": 4,
+      "away": 1
+    },
+    "venue": null,
+    "city": null,
+    "event": {
+      "strEvent": "FC CFR 1907 Cluj vs FC Metaloglobus",
+      "strLeague": "SuperLiga"
+    },
+    "source": "LPF",
+    "source_league_id": "lpf.ro"
   }
 ]

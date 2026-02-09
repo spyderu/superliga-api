@@ -1,13 +1,16 @@
 {
-  "competition": "SuperLiga (Romanian Liga I)",
+  "competition": "SuperLiga (LPF)",
   "season": "2025-2026",
-  "source": "TheSportsDB",
-  "league_id": "4691",
-  "generated_utc": "2026-02-09T19:31:53Z",
-  "standings_source": "computed_from_matches",
+  "source": "LPF",
+  "generated_utc": "2026-02-09T19:45:39Z",
+  "current_round": 26,
+  "rounds_fetched": {
+    "from": 24,
+    "to": 29
+  },
   "counts": {
-    "fixtures": 0,
-    "results": 2,
-    "standings_rows": 16
+    "fixtures": 17,
+    "results": 11,
+    "standings_rows": 0
   }
 }
