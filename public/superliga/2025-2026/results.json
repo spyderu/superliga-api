@@ -10,8 +10,8 @@
     "away": "Universitatea Craiova",
     "status": "finished",
     "score": {
-      "home": 0,
-      "away": 0
+      "home": 1,
+      "away": 1
     },
     "venue": "Stadionul Arcul de Triumf",
     "city": null,
