@@ -1,0 +1,25 @@
+[
+  {
+    "idEvent": "2276362",
+    "season": "2025-2026",
+    "round": "26",
+    "dateEvent": "2026-02-08",
+    "strTime": "18:00:00",
+    "kickoff_raw": "2026-02-08T18:00:00",
+    "home": "Oțelul Galați",
+    "away": "FCSB",
+    "status": "finished",
+    "score": {
+      "home": 1,
+      "away": 4
+    },
+    "venue": "Stadionul Oţelul",
+    "city": null,
+    "event": {
+      "strEvent": "Oțelul Galați vs FCSB",
+      "strLeague": "Romanian Liga I"
+    },
+    "source": "TheSportsDB",
+    "source_league_id": "4691"
+  }
+]

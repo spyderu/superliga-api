@@ -1,0 +1,62 @@
+[
+  {
+    "position": 1,
+    "team": "Universitatea Craiova",
+    "played": 25,
+    "win": 14,
+    "draw": 7,
+    "loss": 4,
+    "gf": 45,
+    "ga": 24,
+    "gd": 21,
+    "points": 49
+  },
+  {
+    "position": 2,
+    "team": "Rapid București",
+    "played": 26,
+    "win": 14,
+    "draw": 7,
+    "loss": 5,
+    "gf": 41,
+    "ga": 24,
+    "gd": 17,
+    "points": 49
+  },
+  {
+    "position": 3,
+    "team": "Dinamo București",
+    "played": 25,
+    "win": 13,
+    "draw": 9,
+    "loss": 3,
+    "gf": 39,
+    "ga": 22,
+    "gd": 17,
+    "points": 48
+  },
+  {
+    "position": 4,
+    "team": "Argeș Pitești",
+    "played": 26,
+    "win": 13,
+    "draw": 4,
+    "loss": 9,
+    "gf": 34,
+    "ga": 26,
+    "gd": 8,
+    "points": 43
+  },
+  {
+    "position": 5,
+    "team": "Botoșani",
+    "played": 26,
+    "win": 11,
+    "draw": 9,
+    "loss": 6,
+    "gf": 34,
+    "ga": 20,
+    "gd": 14,
+    "points": 42
+  }
+]
