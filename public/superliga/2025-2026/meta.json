@@ -1,16 +1,19 @@
 {
-  "competition": "SuperLiga (LPF)",
+  "competition": "SuperLiga (LPF + LPF2)",
   "season": "2025-2026",
-  "source": "LPF",
-  "generated_utc": "2026-02-09T19:47:39Z",
+  "sources": {
+    "matches": "lpf.ro",
+    "standings": "lpf2.ro"
+  },
+  "generated_utc": "2026-02-09T20:18:26Z",
   "current_round": 26,
-  "rounds_fetched": {
-    "from": 24,
-    "to": 29
+  "status": {
+    "matches": "lpf_ok_rounds:24-29",
+    "standings": "lpf2_ok"
   },
   "counts": {
-    "fixtures": 17,
-    "results": 11,
-    "standings_rows": 0
+    "fixtures": 0,
+    "results": 12,
+    "standings_rows": 16
   }
 }

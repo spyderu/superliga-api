@@ -3,6 +3,29 @@
     "idEvent": null,
     "season": "2025-2026",
     "round": "26",
+    "dateEvent": "2026-02-08",
+    "strTime": "20:00:00",
+    "kickoff_raw": "2026-02-08T20:00:00",
+    "home": "SC OTELUL Galati",
+    "away": "FCSB",
+    "status": "finished",
+    "score": {
+      "home": 1,
+      "away": 1
+    },
+    "venue": null,
+    "city": null,
+    "event": {
+      "strEvent": "SC OTELUL Galati vs FCSB",
+      "strLeague": "SuperLiga"
+    },
+    "source": "LPF",
+    "source_league_id": "lpf.ro"
+  },
+  {
+    "idEvent": null,
+    "season": "2025-2026",
+    "round": "26",
     "dateEvent": "2026-02-07",
     "strTime": "20:00:00",
     "kickoff_raw": "2026-02-07T20:00:00",
