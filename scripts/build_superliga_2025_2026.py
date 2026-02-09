@@ -10,6 +10,9 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from bs4 import BeautifulSoup
 
+SCRIPT_VERSION = "2026-02-09_v1_FORCE_RUN"
+
+
 SEASON = "2025-2026"
 OUTDIR = os.path.join("public", "superliga", SEASON)
 
@@ -317,3 +320,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
