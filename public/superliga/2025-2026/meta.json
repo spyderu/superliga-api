@@ -3,10 +3,10 @@
   "season": "2025-2026",
   "source": "TheSportsDB",
   "league_id": "4691",
-  "generated_utc": "2026-02-09T18:29:18Z",
+  "generated_utc": "2026-02-09T18:44:36Z",
   "counts": {
-    "fixtures": 1,
-    "results": 1,
+    "fixtures": 0,
+    "results": 2,
     "standings_rows": 5
   }
 }
