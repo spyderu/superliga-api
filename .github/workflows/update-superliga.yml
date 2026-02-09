@@ -5,6 +5,11 @@ on:
     - cron: "*/30 * * * *"   # la 30 minute
   workflow_dispatch:
 
+# Nu permite rulări paralele care se calcă pe commit/push
+concurrency:
+  group: superliga-update
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
@@ -14,6 +19,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # important pentru pull --rebase
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -33,6 +40,12 @@ jobs:
         run: |
           git config user.name "superliga-bot"
           git config user.email "superliga-bot@users.noreply.github.com"
+
           git add public/superliga/2025-2026/*.json
           git commit -m "Update SuperLiga data" || echo "No changes"
-          git push
+
+          # ia ce e deja pe remote (dacă a rulat alt job / ai făcut commit manual)
+          git pull --rebase
+
+          # push cu retry (în caz de update concurent)
+          git push || (git pull --rebase && git push)
