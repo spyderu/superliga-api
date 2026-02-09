@@ -8,13 +8,17 @@ LEAGUE_ID = "4691"          # Romanian Liga I (TheSportsDB)
 SEASON = "2025-2026"
 OUTDIR = os.path.join("public", "superliga", SEASON)
 
+def iso_now() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
 def get_json(url: str) -> dict:
     r = requests.get(url, timeout=30)
     r.raise_for_status()
-    return r.json()
-
-def iso_now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    data = r.json()
+    if not isinstance(data, dict):
+        # fallback: dacă serverul întoarce ceva neașteptat
+        return {}
+    return data
 
 def to_int_safe(x):
     try:
@@ -23,6 +27,9 @@ def to_int_safe(x):
         return None
 
 def norm_event(e: dict) -> dict:
+    if not isinstance(e, dict):
+        e = {}
+
     date = (e.get("dateEvent") or "").strip()
     time = (e.get("strTime") or "").strip()
 
@@ -64,6 +71,8 @@ def dedupe_by_id(events: list[dict]) -> list[dict]:
     seen = set()
     uniq = []
     for ev in events:
+        if not isinstance(ev, dict):
+            continue
         k = ev.get("idEvent") or (ev.get("kickoff_raw"), ev.get("home"), ev.get("away"))
         if k in seen:
             continue
@@ -71,42 +80,55 @@ def dedupe_by_id(events: list[dict]) -> list[dict]:
         uniq.append(ev)
     return uniq
 
+def safe_list(x):
+    # TheSportsDB uneori întoarce null, nu listă
+    return x if isinstance(x, list) else []
+
+def write_json(path: str, obj):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(obj, f, ensure_ascii=False, indent=2)
+
 def main():
     os.makedirs(OUTDIR, exist_ok=True)
 
-    # 1) NEXT EVENTS (fixtures / uneori include și finished, depinde de feed)
+    # 1) NEXT EVENTS
     next_url = f"{BASE}/eventsnextleague.php?id={LEAGUE_ID}"
     next_data = get_json(next_url)
-    next_events_raw = next_data.get("events") or []
+    next_events_raw = safe_list(next_data.get("events"))
     next_all = [norm_event(e) for e in next_events_raw]
 
-    fixtures = [m for m in next_all if m["status"] == "scheduled"]
+    fixtures = [m for m in next_all if m.get("status") == "scheduled"]
     fixtures.sort(key=lambda x: (x.get("dateEvent") or "", x.get("strTime") or ""))
 
-    # 2) PAST EVENTS (results)
+    # 2) PAST EVENTS
     past_url = f"{BASE}/eventspastleague.php?id={LEAGUE_ID}"
     past_data = get_json(past_url)
-    past_events_raw = past_data.get("events") or []
+    past_events_raw = safe_list(past_data.get("events"))
     past_all = [norm_event(e) for e in past_events_raw]
-    results = [r for r in past_all if r["status"] == "finished"]
+    results = [r for r in past_all if r.get("status") == "finished"]
 
-    # 3) Dacă "next" a întors meciuri deja terminate, le adăugăm la results
-    results.extend([m for m in next_all if m["status"] == "finished"])
+    # 3) finished din "next" (dacă apar)
+    results.extend([m for m in next_all if m.get("status") == "finished"])
 
-    # dedupe + sort desc (cele mai noi primele)
     results = dedupe_by_id(results)
     results.sort(key=lambda x: (x.get("dateEvent") or "", x.get("strTime") or ""), reverse=True)
 
     # 4) STANDINGS
     table_url = f"{BASE}/lookuptable.php?l={LEAGUE_ID}&s={SEASON}"
     table_data = get_json(table_url)
-    table = table_data.get("table") or []
+    table = safe_list(table_data.get("table"))
 
     standings = []
     for row in table:
+        if not isinstance(row, dict):
+            continue
+        team = (row.get("strTeam") or "").strip()
+        if not team:
+            continue
         standings.append({
             "position": to_int_safe(row.get("intRank")),
-            "team": (row.get("strTeam") or "").strip(),
+            "team": team,
             "played": to_int_safe(row.get("intPlayed")),
             "win": to_int_safe(row.get("intWin")),
             "draw": to_int_safe(row.get("intDraw")),
@@ -117,7 +139,6 @@ def main():
             "points": to_int_safe(row.get("intPoints")),
         })
 
-    standings = [s for s in standings if s["team"]]
     standings.sort(key=lambda x: (x["position"] if x["position"] is not None else 10_000))
 
     meta = {
@@ -133,15 +154,10 @@ def main():
         }
     }
 
-    def write(name: str, obj):
-        path = os.path.join(OUTDIR, name)
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(obj, f, ensure_ascii=False, indent=2)
-
-    write("fixtures.json", fixtures)
-    write("results.json", results)
-    write("standings.json", standings)
-    write("meta.json", meta)
+    write_json(os.path.join(OUTDIR, "fixtures.json"), fixtures)
+    write_json(os.path.join(OUTDIR, "results.json"), results)
+    write_json(os.path.join(OUTDIR, "standings.json"), standings)
+    write_json(os.path.join(OUTDIR, "meta.json"), meta)
 
     print("OK", meta)
 
