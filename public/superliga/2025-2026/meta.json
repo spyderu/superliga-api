@@ -2,7 +2,7 @@
   "competition": "SuperLiga",
   "season": "2025-2026",
   "script_version": "2026-02-09_force_v4_jina",
-  "generated_utc": "2026-03-07T23:47:31Z",
+  "generated_utc": "2026-03-08T02:29:38Z",
   "current_round": 26,
   "rounds_fetched": {
     "from": 24,
@@ -43,10 +43,7 @@
   },
   "debug": {
     "26": [
-      "Liga 1 Romania - Etapa",
-      "Etapa 26",
-      "06 Februarie 2026, 17:00",
-      "06 Februarie 2026, 20:00"
+      "Liga 1 Romania - Etapa"
     ]
   }
 }
